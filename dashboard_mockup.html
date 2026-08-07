@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Management Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0E14;
+    --panel:#12151D;
+    --panel-2:#171B26;
+    --border:#232838;
+    --text:#E8EAF0;
+    --text-dim:#8A91A6;
+    --text-faint:#575E72;
+    --teal:#2DD9C7;
+    --indigo:#6E7CF6;
+    --amber:#F5B84E;
+    --coral:#F0685C;
+    --mint:#4ADE9A;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    padding:28px;
+    min-height:100vh;
+  }
+  .num, .kpi-value, .card-value{ font-family:'Space Grotesk',sans-serif; }
+
+  .topbar{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:24px; flex-wrap:wrap; gap:12px;
+  }
+  .topbar h1{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:22px; font-weight:600; letter-spacing:-0.01em;
+  }
+  .topbar .meta{ color:var(--text-faint); font-size:12.5px; display:flex; align-items:center; gap:8px; }
+  .dot{ width:6px; height:6px; border-radius:50%; background:var(--mint); display:inline-block; box-shadow:0 0 8px var(--mint); }
+
+  .grid-top{
+    display:grid;
+    grid-template-columns: 1.1fr 1.6fr;
+    gap:18px;
+    margin-bottom:18px;
+  }
+  @media(max-width:900px){ .grid-top{grid-template-columns:1fr;} }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px;
+  }
+  .panel-label{
+    font-size:11px; text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--text-faint); font-weight:600; margin-bottom:14px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .ai-badge{
+    width:20px; height:20px; border-radius:6px;
+    background:linear-gradient(135deg,var(--teal),var(--indigo));
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:11px;
+  }
+  .ai-summary-text{ font-size:14.5px; line-height:1.65; color:#CBD0DE; }
+  .ai-summary-text b{ color:var(--text); font-weight:600; }
+  .ai-summary-text .flag{ color:var(--coral); font-weight:600; }
+  .ai-summary-text .good{ color:var(--mint); font-weight:600; }
+
+  .kpi-grid{
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:12px;
+  }
+  @media(max-width:640px){ .kpi-grid{grid-template-columns:repeat(2,1fr);} }
+  .kpi-card{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:14px 16px;
+  }
+  .kpi-icon{ font-size:15px; margin-bottom:10px; opacity:0.9; }
+  .kpi-value{ font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+  .kpi-label{ font-size:11.5px; color:var(--text-dim); margin-top:4px; }
+  .kpi-delta{ font-size:10.5px; margin-top:6px; font-weight:600; }
+  .up{ color:var(--mint); } .down{ color:var(--coral); }
+
+  .section-title{
+    font-size:13px; font-weight:600; color:var(--text-dim);
+    text-transform:uppercase; letter-spacing:0.06em;
+    margin:26px 0 12px;
+  }
+
+  .projects-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  @media(max-width:900px){ .projects-grid{grid-template-columns:1fr;} }
+
+  .project-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:18px; cursor:pointer; transition:border-color .15s ease, transform .1s ease;
+  }
+  .project-card:hover{ border-color:#39435C; }
+  .project-card.open{ border-color:var(--teal); }
+  .pc-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; }
+  .pc-title{ font-size:15.5px; font-weight:600; }
+  .pc-tag{ font-size:10.5px; padding:3px 8px; border-radius:100px; font-weight:600; }
+  .tag-critical{ background:rgba(240,104,92,0.15); color:var(--coral); }
+  .tag-high{ background:rgba(245,184,78,0.15); color:var(--amber); }
+  .tag-ontrack{ background:rgba(74,222,154,0.15); color:var(--mint); }
+
+  .progress-row{ display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .progress-bar{ flex:1; height:6px; border-radius:100px; background:var(--panel-2); overflow:hidden; }
+  .progress-fill{ height:100%; border-radius:100px; background:linear-gradient(90deg,var(--indigo),var(--teal)); }
+  .progress-pct{ font-size:12px; color:var(--text-dim); font-weight:600; min-width:32px; text-align:right; }
+
+  .pc-stats{ display:flex; gap:18px; font-size:12.5px; color:var(--text-dim); }
+  .pc-stats b{ color:var(--text); font-weight:600; }
+
+  .pc-details{
+    margin-top:16px; padding-top:16px; border-top:1px solid var(--border);
+    display:none; font-size:12.5px;
+  }
+  .project-card.open .pc-details{ display:block; }
+  .assignee-row{ display:flex; justify-content:space-between; align-items:center; padding:6px 0; }
+  .assignee-name{ display:flex; align-items:center; gap:8px; color:var(--text); }
+  .avatar{
+    width:20px; height:20px; border-radius:50%; background:var(--indigo);
+    display:flex; align-items:center; justify-content:center; font-size:9.5px; font-weight:700; color:#fff;
+  }
+  .assignee-actions{ color:var(--text-dim); }
+  .hint{ color:var(--text-faint); font-size:11px; margin-top:12px; text-align:center; }
+
+  .charts-grid{ display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:16px; margin-top:0; }
+  @media(max-width:1000px){ .charts-grid{grid-template-columns:1fr;} }
+  .chart-panel{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; }
+  .chart-title{ font-size:13.5px; font-weight:600; margin-bottom:14px; }
+  .chart-wrap{ position:relative; height:220px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Project Management Dashboard</h1>
+  <div class="meta"><span class="dot"></span> Live · refreshed 2 min ago</div>
+</div>
+
+<div class="grid-top">
+  <!-- AI Summary -->
+  <div class="panel">
+    <div class="panel-label"><span class="ai-badge">✦</span> AI Executive Summary</div>
+    <div class="ai-summary-text">
+      Portfolio is tracking at <b>58.8% completion</b> against a 5-day average cycle time.
+      <span class="flag">Customer Portal is 12% over its estimated hours</span> and should be reviewed this week.
+      Design and Discovery carry the heaviest task load across modules.
+      <span class="good">HR Automation is ahead of schedule</span> with no overdue items.
+      Emily and Summer are each holding 8 open tasks — consider rebalancing before next sprint.
+    </div>
+  </div>
+
+  <!-- KPI cards -->
+  <div class="panel">
+    <div class="panel-label">Key Metrics</div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-icon">📁</div>
+        <div class="kpi-value">12</div>
+        <div class="kpi-label">Total Projects</div>
+        <div class="kpi-delta up">↑ 2 this month</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">👥</div>
+        <div class="kpi-value">34</div>
+        <div class="kpi-label">Total Employees</div>
+        <div class="kpi-delta up">↑ 3 new hires</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">✅</div>
+        <div class="kpi-value">7</div>
+        <div class="kpi-label">Completed Projects</div>
+        <div class="kpi-delta up">↑ 1 vs last qtr</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">⚡</div>
+        <div class="kpi-value">312</div>
+        <div class="kpi-label">Total Actions</div>
+        <div class="kpi-delta down">↓ 8% pace</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">🏆</div>
+        <div class="kpi-value">88%</div>
+        <div class="kpi-label">Achievement Rate</div>
+        <div class="kpi-delta up">↑ 4pts</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">⏱</div>
+        <div class="kpi-value">41</div>
+        <div class="kpi-label">Active Tasks</div>
+        <div class="kpi-delta down">↓ 6 overdue-risk</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section-title">Priority Projects — click a card for details</div>
+<div class="projects-grid" id="projectsGrid">
+
+  <div class="project-card" data-id="portal">
+    <div class="pc-head">
+      <div class="pc-title">Customer Portal</div>
+      <div class="pc-tag tag-critical">Over budget</div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-bar"><div class="progress-fill" style="width:74%"></div></div>
+      <div class="progress-pct">74%</div>
+    </div>
+    <div class="pc-stats"><span><b>6</b> assignees</span><span><b>58</b> actions</span></div>
+    <div class="pc-details">
+      <div class="assignee-row"><span class="assignee-name"><span class="avatar">EM</span>Emily</span><span class="assignee-actions">14 actions</span></div>
+      <div class="assignee-row"><span class="assignee-name"><span class="avatar">AN</span>Andrew</span><span class="assignee-actions">11 actions</span></div>
+      <div class="assignee-row"><span class="assignee-name"><span class="avatar">AL</span>Alyssa</span><span class="assignee-actions">9 actions</span></div>
+      <div class="assignee-row"><span class="assignee-name"><span class="avatar">SU</span>Summer</span><span class="assignee-actions">8 actions</span></div>
+    </div>
+    <div class="hint">Click to collapse</div>
+  </div>
+
+  <div class="project-card" data-id="hr">
+    <div class="pc-head">
+      <div class="pc-title">HR Automation</div>
+      <div class="pc-tag tag-ontrack">On track</div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-bar"><div class="progress-fill" style="width:91%"></div></div>
+      <div class="progress-pct">91%</div>
+    </div>
+    <div class="pc-stats"><span><b>4</b> assignees</span><span><b>39</b> actions</span></div>
+    <div class="pc-details">
+      <div class="assignee-row"><span class="assignee-name"><span class="avatar">AP</span>April</span><span class="assignee-actions">12 actions</span></div>
+      <div class="assignee-row"><span class="assignee-name"><span class="avatar">AN</span>Andrew</span><span class="assignee-actions">10 actions</span></div>
+      <div class="assignee-row"><span class="assignee-name"><span class="avatar">EM</span>Emily</span><span class="assignee-actions">9 actions</span></div>
+    </div>
+    <div class="hint">Click to collapse</div>
+  </div>
+
+  <div class="project-card" data-id="api">
+    <div class="pc-head">
+      <div class="pc-title">API Platform</div>
+      <div class="pc-tag tag-high">Needs review</div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-bar"><div class="progress-fill" style="width:52%"></div></div>
+      <div class="progress-pct">52%</div>
+    </div>
+    <div class="pc-stats"><span><b>5</b> assignees</span><span><b>44</b> actions</span></div>
+    <div class="pc-details">
+      <div class="assignee-row"><span class="assignee-name"><span class="avatar">SU</span>Summer</span><span class="assignee-actions">13 actions</span></div>
+      <div class="assignee-row"><span class="assignee-name"><span class="avatar">AL</span>Alyssa</span><span class="assignee-actions">10 actions</span></div>
+      <div class="assignee-row"><span class="assignee-name"><span class="avatar">AP</span>April</span><span class="assignee-actions">7 actions</span></div>
+    </div>
+    <div class="hint">Click to collapse</div>
+  </div>
+
+</div>
+
+<div class="section-title">Portfolio Breakdown</div>
+<div class="charts-grid">
+  <div class="chart-panel">
+    <div class="chart-title">Tasks by Module</div>
+    <div class="chart-wrap"><canvas id="chartModule"></canvas></div>
+  </div>
+  <div class="chart-panel">
+    <div class="chart-title">Task Status</div>
+    <div class="chart-wrap"><canvas id="chartStatus"></canvas></div>
+  </div>
+  <div class="chart-panel">
+    <div class="chart-title">Workload by Assignee</div>
+    <div class="chart-wrap"><canvas id="chartWorkload"></canvas></div>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.project-card').forEach(card=>{
+    card.addEventListener('click', ()=>{
+      card.classList.toggle('open');
+      const hint = card.querySelector('.hint');
+      hint.textContent = card.classList.contains('open') ? 'Click to collapse' : 'Click for details';
+    });
+    card.querySelector('.hint').textContent = 'Click for details';
+  });
+
+  Chart.defaults.color = '#8A91A6';
+  Chart.defaults.font.family = 'Inter';
+  Chart.defaults.font.size = 11;
+
+  new Chart(document.getElementById('chartModule'), {
+    type:'bar',
+    data:{
+      labels:['Design','Discovery','Dev','QA','Prod'],
+      datasets:[{ data:[20,16,14,10,10], backgroundColor:'#2DD9C7', borderRadius:5, maxBarThickness:26 }]
+    },
+    options:{
+      indexAxis:'y', plugins:{legend:{display:false}},
+      scales:{ x:{grid:{color:'#1E2330'}}, y:{grid:{display:false}} }
+    }
+  });
+
+  new Chart(document.getElementById('chartStatus'), {
+    type:'doughnut',
+    data:{
+      labels:['Open','In Progress','Code Review','On Hold','Validated'],
+      datasets:[{ data:[46,17,26,6,6], backgroundColor:['#6E7CF6','#4ADE9A','#8B93A5','#F5B84E','#2DD9C7'], borderColor:'#12151D', borderWidth:3 }]
+    },
+    options:{
+      cutout:'68%',
+      plugins:{ legend:{ position:'bottom', labels:{boxWidth:8, padding:10, font:{size:10}} } }
+    }
+  });
+
+  new Chart(document.getElementById('chartWorkload'), {
+    type:'bar',
+    data:{
+      labels:['Emily','Summer','Andrew','Alyssa','April'],
+      datasets:[{ data:[8,8,7,6,6], backgroundColor:'#6E7CF6', borderRadius:5, maxBarThickness:26 }]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{ x:{grid:{display:false}}, y:{grid:{color:'#1E2330'}} }
+    }
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Employee Overview</title>
+<style>
+  :root{
+    --bg:#f6f5f2; --card:#ffffff; --border:#e3e1da; --border-strong:#cfccc2;
+    --text:#1f1e1c; --text-2:#63615a; --text-3:#93918a;
+    --accent:#2f5fa8; --accent-bg:#e8eef8;
+    --green:#2f7d4f; --green-bg:#e5f2ea;
+    --amber:#b8791a; --amber-bg:#faf1e2;
+    --red:#b8382b; --red-bg:#f9e9e7;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); padding:32px;
+  }
+  .wrap{max-width:1080px; margin:0 auto;}
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:20px; flex-wrap:wrap; gap:12px;
+  }
+  .who{display:flex; align-items:center; gap:12px;}
+  .avatar-lg{
+    width:44px; height:44px; border-radius:50%; background:var(--accent-bg); color:var(--accent);
+    display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:600; flex-shrink:0;
+  }
+  h1{font-size:19px; font-weight:600; margin:0;}
+  .sub{font-size:12.5px; color:var(--text-3); margin-top:2px;}
+  select{
+    font-size:14px; padding:9px 14px; border-radius:8px;
+    border:1px solid var(--border-strong); background:#fff; color:var(--text);
+    min-width:200px; cursor:pointer;
+  }
+
+  .ai-summary{
+    display:flex; gap:10px; background:var(--card); border:1px solid var(--border);
+    border-radius:var(--radius); padding:13px 16px; margin-bottom:18px; font-size:13px; color:var(--text-2);
+  }
+  .ai-summary .dot{
+    width:16px; height:16px; border-radius:50%; background:var(--accent); flex-shrink:0; margin-top:1px;
+  }
+
+  .kpis{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+    gap:12px; margin-bottom:18px;
+  }
+  .kpi{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+    padding:14px 16px;
+  }
+  .kpi .label{font-size:12px; color:var(--text-3); margin-bottom:6px;}
+  .kpi .value{font-size:23px; font-weight:600;}
+  .kpi .value.small{font-size:17px;}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;}
+  @media (max-width:760px){.grid2{grid-template-columns:1fr;}}
+
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:12px;
+    padding:16px 18px;
+  }
+  .card h2{font-size:14px; font-weight:600; margin:0 0 12px;}
+
+  /* attendance grid */
+  .att-grid{display:grid; grid-template-columns:repeat(10, 1fr); gap:4px;}
+  .att-cell{aspect-ratio:1; border-radius:3px;}
+  .att-legend{display:flex; gap:14px; margin-top:10px; font-size:11.5px; color:var(--text-3);}
+  .att-legend span{display:inline-flex; align-items:center; gap:5px;}
+  .att-swatch{width:9px; height:9px; border-radius:2px; display:inline-block;}
+
+  /* timeline */
+  .tl{list-style:none; margin:0; padding:0;}
+  .tl li{
+    display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); font-size:12.5px;
+  }
+  .tl li:last-child{border-bottom:none;}
+  .tl .day{width:38px; color:var(--text-3); flex-shrink:0;}
+  .tl .desc{color:var(--text-2);}
+
+  .proj-row{
+    display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border);
+  }
+  .proj-row:last-child{border-bottom:none;}
+  .proj-name{font-size:13px; font-weight:500; flex:1; min-width:0;}
+  .bar-track{flex:1.2; height:6px; background:#eeece6; border-radius:4px; overflow:hidden; min-width:60px;}
+  .bar-fill{height:100%; border-radius:4px;}
+  .pct{font-size:11.5px; color:var(--text-2); width:32px; text-align:right; flex-shrink:0;}
+  .status-dot{width:7px; height:7px; border-radius:50%; flex-shrink:0;}
+
+  .important-card{
+    background:var(--accent-bg); border:1px solid #c9d8ee; border-radius:12px; padding:16px 18px;
+  }
+  .important-card .tag{
+    font-size:11px; font-weight:600; color:var(--accent); text-transform:uppercase;
+    letter-spacing:0.03em; margin-bottom:6px;
+  }
+  .important-card .name{font-size:15px; font-weight:600; margin-bottom:4px;}
+  .important-card .why{font-size:12.5px; color:var(--text-2); line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="who">
+      <div class="avatar-lg" id="avatar">E</div>
+      <div>
+        <h1 id="empName">Emily</h1>
+        <div class="sub">Employee overview</div>
+      </div>
+    </div>
+    <select id="empSelect" onchange="render()">
+      <option value="emily">Emily</option>
+      <option value="andrew">Andrew</option>
+      <option value="summer">Summer</option>
+    </select>
+  </header>
+
+  <div class="ai-summary">
+    <div class="dot"></div>
+    <div id="aiText">-</div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="label">Open tasks</div><div class="value" id="kpiOpen">-</div></div>
+    <div class="kpi"><div class="label">Completed</div><div class="value" id="kpiDone">-</div></div>
+    <div class="kpi"><div class="label">Overdue</div><div class="value" id="kpiOverdue">-</div></div>
+    <div class="kpi"><div class="label">Attendance (30d)</div><div class="value small" id="kpiAtt">-</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Attendance — last 30 days</h2>
+      <div class="att-grid" id="attGrid"></div>
+      <div class="att-legend">
+        <span><span class="att-swatch" style="background:#2f7d4f"></span>Present</span>
+        <span><span class="att-swatch" style="background:#b8791a"></span>Late</span>
+        <span><span class="att-swatch" style="background:#b8382b"></span>Absent</span>
+        <span><span class="att-swatch" style="background:#e3e1da"></span>Weekend</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Last week timeline</h2>
+      <ul class="tl" id="weekTl"></ul>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Project timelines</h2>
+      <div id="projList"></div>
+    </div>
+    <div class="important-card">
+      <div class="tag">Important project</div>
+      <div class="name" id="impName">-</div>
+      <div class="why" id="impWhy">-</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const DATA = {
+  emily: {
+    name: "Emily",
+    aiSummary: "Emily is on track across all 3 projects, no overdue tasks, attendance solid at 96% this month.",
+    kpi: {open:5, done:14, overdue:0, att:"96%"},
+    attendance: genAttendance([2,2,2,2,2,2,2,2,2,2,2,0,2,2,2,2,2,0,2,2,2,2,2,2,0,2,2,2,2,2]),
+    week: [
+      {day:"Mon", desc:"Finished Customer Portal wireframes"},
+      {day:"Tue", desc:"Code review on Mobile App v2"},
+      {day:"Wed", desc:"Client call — Customer Portal"},
+      {day:"Thu", desc:"Started API Platform integration"},
+      {day:"Fri", desc:"Sprint demo + retro"}
+    ],
+    projects: [
+      {name:"Customer Portal Revamp", pct:82, color:"green"},
+      {name:"Mobile App v2", pct:65, color:"green"},
+      {name:"API Platform", pct:58, color:"amber"}
+    ],
+    important: {name:"Customer Portal Revamp", why:"Highest client visibility this quarter, closest to completion approval."}
+  },
+  andrew: {
+    name: "Andrew",
+    aiSummary: "Andrew has 1 overdue task on HR Automation, attendance dipped to 84% with 2 late arrivals this month.",
+    kpi: {open:7, done:9, overdue:1, att:"84%"},
+    attendance: genAttendance([2,2,1,2,2,2,2,1,2,0,2,2,3,2,2,2,2,0,2,2,2,2,1,2,0,2,2,2,2,2]),
+    week: [
+      {day:"Mon", desc:"Late arrival — HR Automation standup missed"},
+      {day:"Tue", desc:"Debugging Ollama routing issue"},
+      {day:"Wed", desc:"Data Warehouse schema review"},
+      {day:"Thu", desc:"HR Automation task overdue — flagged"},
+      {day:"Fri", desc:"Caught up on Mobile App v2 tickets"}
+    ],
+    projects: [
+      {name:"Mobile App v2", pct:65, color:"green"},
+      {name:"HR Automation", pct:40, color:"red"},
+      {name:"Data Warehouse", pct:20, color:"red"}
+    ],
+    important: {name:"HR Automation", why:"Overdue task here is blocking the Ops team's rollout timeline."}
+  },
+  summer: {
+    name: "Summer",
+    aiSummary: "Summer is balanced across 3 projects with strong attendance, API Platform is closest to milestone.",
+    kpi: {open:6, done:11, overdue:0, att:"100%"},
+    attendance: genAttendance([2,2,2,2,2,2,2,2,2,2,2,0,2,2,2,2,2,0,2,2,2,2,2,2,0,2,2,2,2,2]),
+    week: [
+      {day:"Mon", desc:"API Platform load testing"},
+      {day:"Tue", desc:"Paired with Andrew on Ollama routing"},
+      {day:"Wed", desc:"Documentation pass — API Platform"},
+      {day:"Thu", desc:"Reviewed Data Warehouse tickets"},
+      {day:"Fri", desc:"Sprint demo + retro"}
+    ],
+    projects: [
+      {name:"API Platform", pct:70, color:"green"},
+      {name:"Data Warehouse", pct:38, color:"amber"},
+      {name:"HR Automation", pct:40, color:"amber"}
+    ],
+    important: {name:"API Platform", why:"Nearest to its milestone date, unblocks two other teams once shipped."}
+  }
+};
+
+// status codes: 0=weekend 1=late 2=present 3=absent
+function genAttendance(arr){ return arr; }
+const attColor = {0:"#e3e1da", 1:"#b8791a", 2:"#2f7d4f", 3:"#b8382b"};
+const colorMap = {green:"#2f7d4f", amber:"#b8791a", red:"#b8382b"};
+
+function initials(n){ return n.slice(0,2).toUpperCase(); }
+
+function render(){
+  const key = document.getElementById("empSelect").value;
+  const e = DATA[key];
+
+  document.getElementById("empName").textContent = e.name;
+  document.getElementById("avatar").textContent = initials(e.name);
+  document.getElementById("aiText").textContent = e.aiSummary;
+
+  document.getElementById("kpiOpen").textContent = e.kpi.open;
+  document.getElementById("kpiDone").textContent = e.kpi.done;
+  document.getElementById("kpiOverdue").textContent = e.kpi.overdue;
+  document.getElementById("kpiAtt").textContent = e.kpi.att;
+
+  const attGrid = document.getElementById("attGrid");
+  attGrid.innerHTML = e.attendance.map(code =>
+    `<div class="att-cell" style="background:${attColor[code]}"></div>`
+  ).join("");
+
+  const weekTl = document.getElementById("weekTl");
+  weekTl.innerHTML = e.week.map(d => `
+    <li><span class="day">${d.day}</span><span class="desc">${d.desc}</span></li>
+  `).join("");
+
+  const projList = document.getElementById("projList");
+  projList.innerHTML = e.projects.map(p => `
+    <div class="proj-row">
+      <span class="status-dot" style="background:${colorMap[p.color]}"></span>
+      <span class="proj-name">${p.name}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${p.pct}%; background:${colorMap[p.color]}"></div></div>
+      <span class="pct">${p.pct}%</span>
+    </div>
+  `).join("");
+
+  document.getElementById("impName").textContent = e.important.name;
+  document.getElementById("impWhy").textContent = e.important.why;
+}
+
+render();
+</script>
+</body>
+</html>
