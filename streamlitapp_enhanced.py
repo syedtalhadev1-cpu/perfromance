@@ -327,6 +327,164 @@ def chart_hours(p):
         use_container_width=True,
         config={"displayModeBar":False,"responsive":True}
     )
+def chart_employee_focus_hours(focus_imp):
+    if not focus_imp:
+        st.info("No employee focus project available.")
+        return
+
+    rows = []
+
+    for x in focus_imp.values():
+        if not x:
+            continue
+
+    responsible = txt(x.get("Responsible"), "").strip()
+    if responsible.lower() in ("nan", "none", "null", ""):
+        responsible = ""
+
+    employee_name = txt(x.get("Employee"), "").strip()
+
+    if employee_name.lower() in ("nan", "none", "null", ""):
+       employee_name = ""
+
+    team_res = txt(x.get("Team_Res"), "").strip()
+
+    if team_res.lower() in ("nan", "none", "null", ""):
+      team_res = ""
+
+    employee_id = txt(x.get("EmployeeId"), "").strip()
+
+    if employee_id.lower() in ("nan", "none", "null", ""):
+      employee_id = ""
+
+    if responsible:
+      pass
+    elif employee_name:
+     responsible = employee_name
+    elif team_res and employee_id and team_res == employee_id:
+     responsible = "Employee" + employee_id
+    elif team_res:
+     responsible = team_res
+    else:
+     responsible = "Not Assigned"
+
+    rows.append({
+            "Project_Name": txt(
+                x.get("Project_Name"),
+                "Unnamed Project"
+            ),
+            "AllocatedHours": num(
+                x.get("AllocatedHours")
+            ),
+            "UsedHours": num(
+                x.get("UsedHours")
+            ),
+            "Cost": num(
+                x.get("Cost")
+            ),
+            "Responsible": responsible
+        })
+
+    d = pd.DataFrame(rows)
+
+    if d.empty:
+        st.info("No employee focus project hours available.")
+        return
+
+    d["AllocatedHours"] = pd.to_numeric(
+        d["AllocatedHours"],
+        errors="coerce"
+    ).fillna(0)
+
+    d["UsedHours"] = pd.to_numeric(
+        d["UsedHours"],
+        errors="coerce"
+    ).fillna(0)
+
+    d["Cost"] = pd.to_numeric(
+        d["Cost"],
+        errors="coerce"
+    ).fillna(0)
+
+    d["Project"] = [f"P{i + 1}" for i in range(len(d))]
+
+    custom = d[
+        [
+            "Project_Name",
+            "Responsible",
+            "Cost",
+            "AllocatedHours",
+            "UsedHours"
+        ]
+    ].to_numpy()
+
+    hover = (
+        "<b>%{customdata[0]}</b><br>"
+        "Responsible: %{customdata[1]}<br>"
+        "Cost: %{customdata[2]:,.0f}<br>"
+        "Allocated: %{customdata[3]:,.1f} hrs<br>"
+        "Used: %{customdata[4]:,.1f} hrs"
+        "<extra></extra>"
+    )
+
+    f = go.Figure()
+
+    f.add_trace(
+        go.Bar(
+            name="Allocated",
+            x=d["Project"],
+            y=d["AllocatedHours"],
+            marker_color="#8B7CFF",
+            customdata=custom,
+            hovertemplate=hover
+        )
+    )
+
+    f.add_trace(
+        go.Bar(
+            name="Used",
+            x=d["Project"],
+            y=d["UsedHours"],
+            marker_color="#2DD9C7",
+            customdata=custom,
+            hovertemplate=hover
+        )
+    )
+
+    f.update_layout(
+        **layout(),
+        barmode="group",
+        hovermode="closest",
+        xaxis=dict(
+            title=None,
+            showticklabels=False,
+            showgrid=False,
+            zeroline=False
+        ),
+        yaxis=dict(
+            title="Hours",
+            gridcolor="#252B3A",
+            showgrid=True,
+            zeroline=False
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        showlegend=True
+    )
+
+    st.plotly_chart(
+        f,
+        use_container_width=True,
+        config={
+            "displayModeBar": False,
+            "responsive": True
+        }
+    )
 def chart_risk(p):
     d=p.dropna(subset=['Deadline']).copy()
     if d.empty:st.info('No valid deadlines.');return
@@ -452,7 +610,7 @@ def focus_project_details(imp):
     </div>
     </div>
     """,unsafe_allow_html=True)
-def employee_focus_cards(imp,title):
+def employee_focus_cards(imp,title,p):
     st.markdown(f'<div class="section-title">{html.escape(title)} — click a card for details</div>',unsafe_allow_html=True)
     arr=[('urgent_project','🚨 Urgent','danger'),('high_cost_project','💰 High Cost','warning'),('historical_project','📅 Historical','info')]
     arr=[x for x in arr if imp.get(x[0])]
@@ -470,11 +628,27 @@ def employee_focus_cards(imp,title):
         name=txt(x.get("Project_Name"),"Unnamed")
         status=txt(x.get("Status"),"Unknown")
         deadline=txt(x.get("DeadLine",x.get("Deadline")),"N/A")[:10]
-        responsible=txt(x.get("Responsible",x.get("Employee")),"Not Assigned")
         division=txt(x.get("DPG",x.get("Division")),"N/A")
         actions=x.get("TotalActions",x.get("Total_Action",x.get("Actions",0)))
         cost=num(x.get("Cost"))
         members=x.get("AssignedMembers",x.get("Assigned_Members",x.get("Members",0)))
+        
+        # ---------------------------------------------------------
+        # THIS IS WHERE 'p' IS USED TO GET THE CORRECT RESPONSIBLE
+        # ---------------------------------------------------------
+        proj_code = x.get("Project_Code")
+        responsible = "Not Assigned"
+        
+        if p is not None and not p.empty and proj_code:
+            match = p[p['Project_Code'] == proj_code]
+            if not match.empty:
+                responsible = str(match['Responsible'].iloc[0])
+                
+        # Fallback just in case it's still empty
+        if pd.isna(responsible) or responsible == "" or responsible == "Not Assigned":
+            responsible = txt(x.get("Responsible", x.get("Employee", x.get("Team_Res"))), "Not Assigned")
+        # ---------------------------------------------------------
+
         with col:
             st.markdown(f'''
 <details class="focus-expand">
@@ -520,8 +694,8 @@ def visual_timeline(t):
 
 # Sidebar
 st.sidebar.markdown('**Performance Intelligence**\n\nProject & employee analytics')
-company=st.sidebar.selectbox('Company',['400','CRS','DRC','DC'])
-mode=st.sidebar.radio('Dashboard',['Company','Employee','Project Performance (AI)'])
+company=st.sidebar.selectbox('Company',['400','CRS','DRC',])
+mode=st.sidebar.radio('Dashboard',['Company','Employee','Project Performance'])
 today=date.today();fd=st.sidebar.date_input('From date',today.replace(month=1,day=1),max_value=today);td=st.sidebar.date_input('To date',today,min_value=fd,max_value=today)
 weekly_days=st.sidebar.slider('Weekly report window',7,90,7,7)
 if st.sidebar.button('Render Weekly PDF',use_container_width=True):
@@ -533,7 +707,7 @@ if df.empty:st.warning('No records returned for the selected filters.');st.stop(
 
 # Employee selector
 employee_id=None;selected_employee=None
-if mode in ['Employee','Project Performance (AI)']:
+if mode in ['Employee','Project Performance']:
     opts=(df[['EmployeeId','Employee']].dropna().assign(EmployeeId=lambda x:x.EmployeeId.astype(str).str.replace(r'\.0$','',regex=True).str.strip(),Employee=lambda x:x.Employee.astype(str).str.strip()).drop_duplicates().sort_values('Employee').to_dict('records'))
     if not opts:st.warning('No employees found.');st.stop()
     selected_employee=st.sidebar.selectbox('Employee',opts,format_func=lambda x:f"{x['Employee']} ({x['EmployeeId']})");employee_id=selected_employee['EmployeeId']
@@ -543,18 +717,39 @@ if mode=='Employee':
     days=st.sidebar.slider('Timeline days',7,90,30,7)
     ed=get_employee_timeline_dashboard(employee_id,company,days); ek=ed.get('summary',{})
     edf=clean_timeline_rows(load_employee_important_project_data(employee_id,company)); imp=get_employee_important_projects(edf); t=pd.DataFrame(ed.get('timeline_records',[]));p=project_df(edf)
+    
+    # ==========================================
+    # 🚀 FIX: Replace ID with Name for the Employee
+    # ==========================================
+    emp_name = selected_employee.get("Employee", str(employee_id))
+    
+    # Fix 'p' (Used for Focus Cards)
+    if not p.empty and 'Responsible' in p.columns:
+        p['Responsible'] = p['Responsible'].astype(str).replace({str(employee_id): emp_name})
+        
+    # Fix 'imp' (Used for Charts and Tooltips)
+    for k, v in imp.items():
+        if isinstance(v, dict):
+            for field in ["Responsible", "Employee", "Team_Res"]:
+                if str(v.get(field)).strip() == str(employee_id).strip():
+                    v[field] = emp_name
+                    v["Responsible"] = emp_name
+    # ==========================================
+
     st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Employee Performance</div><div class="header-title">👤 {html.escape(txt(selected_employee.get("Employee"),"Employee"))}</div><div class="header-sub">Employee ID {html.escape(str(employee_id))} · Company {company} · Last {days} days</div></div><div class="live">.</div></div>',unsafe_allow_html=True)
     a,b=st.columns([1.05,1.7],gap='large')
     with a:
         with st.container(border=True):st.markdown('<div class="panel-label">✦ Employee Overview</div><div class="ai-copy">This view combines assigned projects, actions and actual daily work logs. The analytics below are calculated from the existing Employee model data.</div>',unsafe_allow_html=True)
     with b:st.markdown(cards([('📁','Projects',ek.get('total_projects',0)),('⚡','Actions',ek.get('total_actions',0)),('✅','Completed',ek.get('completed_projects',0)),('⏱','Remaining',ek.get('remaining_projects',0)),('🏆','Achievement',f"{ek.get('achievement_pct',0)}%"),('📅','Timeline Days',days)]),unsafe_allow_html=True)
+    
     focus_imp={}
     for k in ['urgent_project','high_cost_project','historical_project']:
       if imp.get(k):
         focus_imp[k]=imp[k]
     if not focus_imp and imp.get('recent_project'):
        focus_imp['recent_project']=imp['recent_project']
-    employee_focus_cards(focus_imp,'Employee Focus Projects')
+       
+    employee_focus_cards(focus_imp,'Employee Focus Projects',p)
     
 
     st.markdown('<div class="section-title">Performance Analytics</div>',unsafe_allow_html=True)
@@ -563,18 +758,23 @@ if mode=='Employee':
         #with st.container(border=True):st.markdown('<div class="chart-title">Project Progress</div>',unsafe_allow_html=True);chart_progress(p)
         with st.container(border=True):st.markdown('<div class="chart-title">Work Status Distribution</div>',unsafe_allow_html=True);chart_status(t,p)
     with c2:
-        with st.container(border=True):st.markdown('<div class="chart-title">Allocated vs Used Hours</div>',unsafe_allow_html=True);chart_hours(p)
+     with st.container(border=True):
+        st.markdown(
+            '<div class="chart-title">Allocated vs Used Hours</div>',
+            unsafe_allow_html=True
+        )
+        chart_employee_focus_hours(focus_imp)
     c1,c2=st.columns(2,gap='large')
-    with c1:
-        with st.container(border=True):st.markdown('<div class="chart-title">Daily Work Trend</div>',unsafe_allow_html=True);chart_daily(t)
-    with c2:
+    #with c1:
+        #with st.container(border=True):st.markdown('<div class="chart-title">Daily Work Trend</div>',unsafe_allow_html=True);chart_daily(t)
+    #with c2:
         #with st.container(border=True):st.markdown('<div class="chart-title">Allocated vs Used Hours</div>',unsafe_allow_html=True);chart_hours(p)
-     st.markdown('<div class="section-title">Project Risk & Workload</div>',unsafe_allow_html=True)
-    c1,c2=st.columns(2,gap='large')
-    with c1:
-        with st.container(border=True):chart_risk(p)
-    with c2:
-        with st.container(border=True):chart_workload(p)
+    #st.markdown('<div class="section-title">Project Risk & Workload</div>',unsafe_allow_html=True)
+    #c1,c2=st.columns(2,gap='large')
+    #with c1:
+     #   with st.container(border=True):chart_risk(p)
+    #with c2:
+     #   with st.container(border=True):chart_workload(p)
     # selected important project
     pm={};po=[]
     for k,l in [('urgent_project','🚨 Urgent'),('high_cost_project','💰 High Cost'),('historical_project','📅 Historical')]:
