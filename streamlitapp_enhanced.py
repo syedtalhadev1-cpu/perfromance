@@ -13,10 +13,13 @@ from dashboard_model import (
     load_important_project_data, project_details,
 )
 from Emodel import (
-    clean_timeline_rows, get_employee_project_details,
+    clean_timeline_rows,
+    get_employee_project_details,
     get_employee_timeline_dashboard,
     get_important_projects as get_employee_important_projects,
     load_important_project_data as load_employee_important_project_data,
+    get_past_3_months_status_trend,
+    load_employee_timeline,
 )
 from pmodel import ProjectDataProcessor
 from summarize import summarize_dashboard
@@ -142,6 +145,7 @@ def project_df(raw):
         elif k in ('team res','teamres','responsible'):mp[c]='Team_Res'
         elif k=='employee':mp[c]='Employee'
         elif k in ('employeeid','employee id'):mp[c]='EmployeeId'
+        
     d=d.rename(columns=mp)
     if 'Project_Name' not in d:return pd.DataFrame()
     for c,default in [('Project_Code',''),('Status','Unknown'),('Deadline',pd.NaT),('AllocatedHours',0),('UsedHours',0),('Cost',0),('Team_Res',''),('Employee',''),('EmployeeId','')]:
@@ -338,52 +342,44 @@ def chart_employee_focus_hours(focus_imp):
         if not x:
             continue
 
-    responsible = txt(x.get("Responsible"), "").strip()
-    if responsible.lower() in ("nan", "none", "null", ""):
-        responsible = ""
+        # ==========================================
+        # EVERYTHING BELOW IS NOW INSIDE THE LOOP
+        # ==========================================
+        responsible = txt(x.get("Responsible"), "").strip()
+        if responsible.lower() in ("nan", "none", "null", ""):
+            responsible = ""
 
-    employee_name = txt(x.get("Employee"), "").strip()
+        employee_name = txt(x.get("Employee"), "").strip()
+        if employee_name.lower() in ("nan", "none", "null", ""):
+            employee_name = ""
 
-    if employee_name.lower() in ("nan", "none", "null", ""):
-       employee_name = ""
+        team_res = txt(x.get("Team_Res"), "").strip()
+        if team_res.lower() in ("nan", "none", "null", ""):
+            team_res = ""
 
-    team_res = txt(x.get("Team_Res"), "").strip()
+        employee_id = txt(x.get("EmployeeId"), "").strip()
+        if employee_id.lower() in ("nan", "none", "null", ""):
+            employee_id = ""
 
-    if team_res.lower() in ("nan", "none", "null", ""):
-      team_res = ""
+        if responsible:
+            pass
+        elif employee_name:
+            responsible = employee_name
+        elif team_res and employee_id and team_res == employee_id:
+            responsible = "Employee" + employee_id
+        elif team_res:
+            responsible = team_res
+        else:
+            responsible = "Not Assigned"
 
-    employee_id = txt(x.get("EmployeeId"), "").strip()
-
-    if employee_id.lower() in ("nan", "none", "null", ""):
-      employee_id = ""
-
-    if responsible:
-      pass
-    elif employee_name:
-     responsible = employee_name
-    elif team_res and employee_id and team_res == employee_id:
-     responsible = "Employee" + employee_id
-    elif team_res:
-     responsible = team_res
-    else:
-     responsible = "Not Assigned"
-
-    rows.append({
-            "Project_Name": txt(
-                x.get("Project_Name"),
-                "Unnamed Project"
-            ),
-            "AllocatedHours": num(
-                x.get("AllocatedHours")
-            ),
-            "UsedHours": num(
-                x.get("UsedHours")
-            ),
-            "Cost": num(
-                x.get("Cost")
-            ),
+        rows.append({
+            "Project_Name": txt(x.get("Project_Name"), "Unnamed Project"),
+            "AllocatedHours": num(x.get("AllocatedHours")),
+            "UsedHours": num(x.get("UsedHours")),
+            "Cost": num(x.get("Cost")),
             "Responsible": responsible
         })
+        # ==========================================
 
     d = pd.DataFrame(rows)
 
@@ -391,32 +387,14 @@ def chart_employee_focus_hours(focus_imp):
         st.info("No employee focus project hours available.")
         return
 
-    d["AllocatedHours"] = pd.to_numeric(
-        d["AllocatedHours"],
-        errors="coerce"
-    ).fillna(0)
+    d["AllocatedHours"] = pd.to_numeric(d["AllocatedHours"], errors="coerce").fillna(0)
+    d["UsedHours"] = pd.to_numeric(d["UsedHours"], errors="coerce").fillna(0)
+    d["Cost"] = pd.to_numeric(d["Cost"], errors="coerce").fillna(0)
 
-    d["UsedHours"] = pd.to_numeric(
-        d["UsedHours"],
-        errors="coerce"
-    ).fillna(0)
-
-    d["Cost"] = pd.to_numeric(
-        d["Cost"],
-        errors="coerce"
-    ).fillna(0)
-
+    # Label them P1, P2, P3 on the bottom of the chart
     d["Project"] = [f"P{i + 1}" for i in range(len(d))]
 
-    custom = d[
-        [
-            "Project_Name",
-            "Responsible",
-            "Cost",
-            "AllocatedHours",
-            "UsedHours"
-        ]
-    ].to_numpy()
+    custom = d[["Project_Name", "Responsible", "Cost", "AllocatedHours", "UsedHours"]].to_numpy()
 
     hover = (
         "<b>%{customdata[0]}</b><br>"
@@ -457,7 +435,7 @@ def chart_employee_focus_hours(focus_imp):
         hovermode="closest",
         xaxis=dict(
             title=None,
-            showticklabels=False,
+            showticklabels=True, # Changed to True so you can see P1, P2
             showgrid=False,
             zeroline=False
         ),
@@ -692,6 +670,177 @@ def visual_timeline(t):
             st.markdown(f'<div class="timeline-item"><div class="timeline-time">{html.escape(txt(r.get("Start"),""))} → {html.escape(txt(r.get("End"),""))}</div><div><div class="timeline-action">{html.escape(txt(r.get("Action"),"Work Activity"))}</div><div class="timeline-work">{html.escape(txt(r.get("Work"),"Work activity recorded"))}</div></div><div class="timeline-right"><span>{html.escape(txt(r.get("Duration"),""))}</span><span class="pill">{html.escape(txt(r.get("Status"),"Recorded"))}</span></div></div>',unsafe_allow_html=True)
         st.markdown('</div>',unsafe_allow_html=True)
 
+def chart_past_3_months_trend(trend):
+
+    if trend.empty:
+        st.info("No project trend data available.")
+        return
+
+    available_months = sorted(
+        trend["MonthDate"].unique()
+    )
+
+    month_labels = [
+        pd.Timestamp(m).strftime("%b %Y")
+        for m in available_months
+    ]
+
+    fig = go.Figure()
+
+    statuses = [
+        "Completed",
+        "InProcess",
+        "Delayed"
+    ]
+
+    # Status colors
+    status_colors = {
+        "Completed": "#2DD9C7",
+        "InProcess": "#4E9AF5",
+        "Delayed": "#F55B4E",
+        "Unknown": "#6C757D"
+    }
+
+    # Add other statuses if they exist
+    for status in trend["StatusClean"].unique():
+
+        if status not in statuses:
+            statuses.append(status)
+
+        if status not in status_colors:
+            status_colors[status] = "#888888"
+
+    # -------------------------
+    # Stacked bars
+    # -------------------------
+
+    for status in statuses:
+
+        values = []
+
+        for month in available_months:
+
+            temp = trend[
+                (trend["MonthDate"] == month) &
+                (trend["StatusClean"] == status)
+            ]
+
+            if temp.empty:
+                values.append(0)
+            else:
+                values.append(
+                    int(temp["ProjectCount"].sum())
+                )
+
+        fig.add_trace(
+            go.Bar(
+                x=month_labels,
+                y=values,
+                name=status,
+                marker_color=status_colors.get(
+                    status,
+                    "#888888"
+                )
+            )
+        )
+
+    # -------------------------
+    # Completed line
+    # -------------------------
+
+    completed_values = []
+
+    for month in available_months:
+
+        temp = trend[
+            (trend["MonthDate"] == month) &
+            (trend["StatusClean"] == "Completed")
+        ]
+
+        if temp.empty:
+            completed_values.append(0)
+        else:
+            completed_values.append(
+                int(temp["ProjectCount"].sum())
+            )
+
+    fig.add_trace(
+        go.Scatter(
+            x=month_labels,
+            y=completed_values,
+            name="Completed Trend",
+            mode="lines+markers",
+            line=dict(
+                color="#F5B84E",
+                width=3
+            ),
+            marker=dict(
+                size=7,
+                color="#F5B84E"
+            )
+        )
+    )
+
+    # -------------------------
+    # Layout
+    # -------------------------
+
+    fig.update_layout(
+        # 1. Update the title text AND pin it to the very top
+        title=dict(
+            text="Project Status - Last Month", 
+            y=0.98,  # Pushes title to the top edge
+            x=0.01
+        ),
+
+        barmode="stack",
+
+        xaxis=dict(
+            title="",
+            categoryorder="array",
+            categoryarray=month_labels
+        ),
+
+        yaxis=dict(
+            title="",
+            showticklabels=False,
+            showgrid=False,
+            zeroline=False
+        ),
+
+        # 2. Perfectly align the legend below the title, above the graph
+        legend=dict(
+            orientation="h",
+            yanchor="bottom", 
+            y=1.02,   # Positions it cleanly right above the bars
+            xanchor="left",
+            x=0.01
+        ),
+
+        height=450, # Made the chart slightly taller to fit everything
+
+        # 3. THIS IS THE MAGIC FIX: Increase the top margin (t=140) 
+        # This gives the 6 legend items plenty of empty space so they don't overlap!
+        margin=dict(
+            l=20,
+            r=20,
+            t=140, 
+            b=20
+        ),
+
+        hovermode="x unified",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={
+            "displayModeBar": False
+        }
+    )
+
 # Sidebar
 st.sidebar.markdown('**Performance Intelligence**\n\nProject & employee analytics')
 company=st.sidebar.selectbox('Company',['400','CRS','DRC',])
@@ -765,8 +914,27 @@ if mode=='Employee':
         )
         chart_employee_focus_hours(focus_imp)
     c1,c2=st.columns(2,gap='large')
-    #with c1:
-        #with st.container(border=True):st.markdown('<div class="chart-title">Daily Work Trend</div>',unsafe_allow_html=True);chart_daily(t)
+    # Get project trend data
+    employee_rows = load_employee_timeline(
+       employee_id=employee_id,
+       company_code=company,
+       days_back=121
+    )
+
+    trend = get_past_3_months_status_trend(employee_rows)
+
+    c1, c2 = st.columns(2, gap="large")
+
+    with c1:
+      with st.container(border=True):
+        st.markdown(
+            '<div class="chart-title"> Month Progress</div>',
+            unsafe_allow_html=True
+        )
+
+        chart_past_3_months_trend(trend)
+
+    c1, c2 = st.columns(2, gap="large")
     #with c2:
         #with st.container(border=True):st.markdown('<div class="chart-title">Allocated vs Used Hours</div>',unsafe_allow_html=True);chart_hours(p)
     #st.markdown('<div class="section-title">Project Risk & Workload</div>',unsafe_allow_html=True)
@@ -776,23 +944,23 @@ if mode=='Employee':
     #with c2:
      #   with st.container(border=True):chart_workload(p)
     # selected important project
-    pm={};po=[]
-    for k,l in [('urgent_project','🚨 Urgent'),('high_cost_project','💰 High Cost'),('historical_project','📅 Historical')]:
-        x=imp.get(k)
-        if x:lab=f'{l} - {x.get("Project_Name","Unnamed")}';po.append(lab);pm[lab]=x['Project_Code']
-    if not po and imp.get('recent_project'):
-        x=imp['recent_project'];lab=f'🕒 Recent - {x.get("Project_Name","Unnamed")}';po.append(lab);pm[lab]=x['Project_Code']
-    st.markdown('<div class="section-title">Project Explorer</div>',unsafe_allow_html=True)
-    l,r=st.columns([.9,2],gap='large')
-    with l:
-        with st.container(border=True):sel=st.radio('Project',po,label_visibility='collapsed') if po else None
-    with r:
-        with st.container(border=True):
-            ep=get_employee_project_details(edf,pm[sel],employee_id) if sel else {'Actions':[]}
-            st.markdown(f'<div class="header-title" style="font-size:18px">{html.escape(txt(ep.get("Project_Name"),"Select a project"))}</div><div class="header-sub">Status: {html.escape(txt(ep.get("Status")))} · Deadline: {html.escape(txt(ep.get("Deadline")))} · Actions: {ep.get("Total_Actions_Logged",0)}</div>',unsafe_allow_html=True)
-    visual_timeline(t)
-    with st.expander('🔎 View detailed timeline records'):st.dataframe(t,use_container_width=True,hide_index=True)
-    with st.expander('📝 View selected project work logs'):st.dataframe(pd.DataFrame(ep.get('Actions',[])),use_container_width=True,hide_index=True)
+    #pm={};po=[]
+    #for k,l in [('urgent_project','🚨 Urgent'),('high_cost_project','💰 High Cost'),('historical_project','📅 Historical')]:
+     #   x=imp.get(k)
+      #  if x:lab=f'{l} - {x.get("Project_Name","Unnamed")}';po.append(lab);pm[lab]=x['Project_Code']
+    #if not po and imp.get('recent_project'):
+     #   x=imp['recent_project'];lab=f'🕒 Recent - {x.get("Project_Name","Unnamed")}';po.append(lab);pm[lab]=x['Project_Code']
+    #st.markdown('<div class="section-title">Project Explorer</div>',unsafe_allow_html=True)
+    #l,r=st.columns([.9,2],gap='large')
+    #with l:
+     #   with st.container(border=True):sel=st.radio('Project',po,label_visibility='collapsed') if po else None
+    #with r:
+     #   with st.container(border=True):
+      #      ep=get_employee_project_details(edf,pm[sel],employee_id) if sel else {'Actions':[]}
+       #     st.markdown(f'<div class="header-title" style="font-size:18px">{html.escape(txt(ep.get("Project_Name"),"Select a project"))}</div><div class="header-sub">Status: {html.escape(txt(ep.get("Status")))} · Deadline: {html.escape(txt(ep.get("Deadline")))} · Actions: {ep.get("Total_Actions_Logged",0)}</div>',unsafe_allow_html=True)
+    #visual_timeline(t)
+    #with st.expander('🔎 View detailed timeline records'):st.dataframe(t,use_container_width=True,hide_index=True)
+    #with st.expander('📝 View selected project work logs'):st.dataframe(pd.DataFrame(ep.get('Actions',[])),use_container_width=True,hide_index=True)
     st.stop()
 
 # Project Performance AI

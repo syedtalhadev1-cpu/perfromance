@@ -28,7 +28,7 @@ CONN_STR = (
 def load_employee_timeline(
     employee_id,
     company_code=None,
-    days_back=7
+    days_back=121
 ):
     """
     Loads the daily timeline logs and project details strictly for the specified employee.
@@ -70,6 +70,150 @@ def load_important_project_data(employee_id, company_code="400"):
         employee_id=employee_id,
         company_code=company_code,
         days_back=days_back
+    )
+def get_past_3_months_status_trend(rows):
+
+    if rows is None:
+        return pd.DataFrame()
+
+    if isinstance(rows, pd.DataFrame):
+        if rows.empty:
+            return pd.DataFrame()
+        df = rows.copy()
+    else:
+        if not rows:
+            return pd.DataFrame()
+        df = pd.DataFrame(rows)
+
+    if df.empty:
+        return pd.DataFrame()
+
+    required = [
+        "TimelineDate",
+        "Project_Code",
+        "Status"
+    ]
+
+    for col in required:
+        if col not in df.columns:
+            return pd.DataFrame()
+
+    t = df.copy()
+    p = df.copy()
+
+    if "TimelineDate" not in t.columns:
+        return pd.DataFrame()
+
+    if "Project_Code" not in t.columns:
+        return pd.DataFrame()
+
+    if "Project_Code" not in p.columns:
+        return pd.DataFrame()
+
+    if "Status" not in p.columns:
+        return pd.DataFrame()
+
+    t["TestDate"] = pd.to_datetime(
+        t["TimelineDate"],
+        errors="coerce"
+    )
+
+    t = t.dropna(subset=["TestDate"])
+
+    today = pd.Timestamp.today().normalize()
+    current_month = today.replace(day=1)
+    start_month = current_month - pd.DateOffset(months=4)
+
+    t = t[
+        (t["TestDate"] >= start_month) &
+        (t["TestDate"] <= today)
+    ].copy()
+
+    if t.empty:
+        return pd.DataFrame()
+
+    t["ProjectKey"] = (
+        t["Project_Code"]
+        .astype(str)
+        .str.strip()
+    )
+
+    p["ProjectKey"] = (
+        p["Project_Code"]
+        .astype(str)
+        .str.strip()
+    )
+
+    p["StatusClean"] = (
+        p["Status"]
+        .fillna("Unknown")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    status_map = {
+        "completed": "Completed",
+        "complete": "Completed",
+        "inprocess": "InProcess",
+        "in process": "InProcess",
+        "in-progress": "InProcess",
+        "in progress": "InProcess",
+        "delay": "Delayed",
+        "delayed": "Delayed"
+    }
+
+    p["StatusClean"] = (
+        p["StatusClean"]
+        .map(status_map)
+        .fillna(p["StatusClean"].str.title())
+    )
+
+    project_status = (
+        p[
+            [
+                "ProjectKey",
+                "StatusClean"
+            ]
+        ]
+        .drop_duplicates("ProjectKey")
+    )
+
+    df = t.merge(
+        project_status,
+        on="ProjectKey",
+        how="left"
+    )
+
+    df["StatusClean"] = df["StatusClean"].fillna("Unknown")
+
+    df["MonthDate"] = (
+        df["TestDate"]
+        .dt.to_period("M")
+        .dt.to_timestamp()
+    )
+
+    df["Month"] = (
+        df["MonthDate"]
+        .dt.strftime("%b %Y")
+    )
+
+    trend = (
+        df.groupby(
+            [
+                "MonthDate",
+                "Month",
+                "StatusClean"
+            ]
+        )["ProjectKey"]
+        .nunique()
+        .reset_index(
+            name="ProjectCount"
+        )
+    )
+
+    return trend.sort_values(
+        ["MonthDate", "StatusClean"]
     )
 
 
