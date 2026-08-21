@@ -1,0 +1,8 @@
+fastapi
+numpy
+ollama
+pandas
+pyodbc
+python-dotenv
+requests
+streamlit
