@@ -1,11 +1,14 @@
 import os
 import pyodbc
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# ============================================================
+# DATABASE CONFIGURATION
+# ============================================================
 
 SERVER = os.getenv("DB_SERVER")
 DATABASE = os.getenv("DB_DATABASE")
@@ -21,13 +24,22 @@ CONN_STR = (
 )
 
 
+# ============================================================
+# LOAD EMPLOYEE TIMELINE
+# ============================================================
+
 def load_employee_timeline(
     employee_id,
     company_code=None,
-    days_back=90
+    days_back=5
 ):
+    conn = None
+    cursor = None
+
     try:
+
         conn = pyodbc.connect(CONN_STR)
+
         cursor = conn.cursor()
 
         cursor.execute(
@@ -39,10 +51,17 @@ def load_employee_timeline(
             """,
             employee_id,
             company_code,
-            days_back,
+            days_back
         )
 
-        columns = [c[0] for c in cursor.description]
+        if cursor.description is None:
+            return []
+
+        columns = [
+            column[0]
+            for column in cursor.description
+        ]
+
         rows = [
             dict(zip(columns, row))
             for row in cursor.fetchall()
@@ -50,462 +69,618 @@ def load_employee_timeline(
 
         return rows
 
-    except pyodbc.Error as db_err:
-        print("Database error:", str(db_err))
+    except pyodbc.Error as db_error:
+
+        st.error(
+            f"Database error: {db_error}"
+        )
+
+        return []
+
+    except Exception as error:
+
+        st.error(
+            f"Unexpected error: {error}"
+        )
+
         return []
 
     finally:
-        if 'cursor' in locals():
+
+        if cursor is not None:
             cursor.close()
 
-        if 'conn' in locals():
+        if conn is not None:
             conn.close()
 
 
-def test_past_3_months_trend(t, p):
+# ============================================================
+# STREAMLIT PAGE
+# ============================================================
 
-    print("\n" + "=" * 60)
-    print("PAST 3 MONTHS PROJECT STATUS TEST")
-    print("=" * 60)
+st.set_page_config(
+    page_title="Employee Timeline Test",
+    page_icon="🧪",
+    layout="wide"
+)
 
-    if t.empty or p.empty:
-        print("Timeline or Project data is EMPTY")
-        return
 
-    t = t.copy()
-    p = p.copy()
+st.title(
+    "🧪 Employee Timeline - Historical Date Test"
+)
 
-    # Find columns
-    timeline_date_col = next(
-        (
-            x for x in t.columns
-            if str(x).strip().lower()
-            in ("timelinedate", "timeline date", "date")
-        ),
-        None
+st.write(
+    "This test checks the employee timeline returned by "
+    "the stored procedure."
+)
+
+
+# ============================================================
+# INPUTS
+# ============================================================
+
+col1, col2 = st.columns(2)
+
+with col1:
+
+    employee_id = st.text_input(
+        "Employee ID",
+        value="5732"
     )
 
-    timeline_project_col = next(
-        (
-            x for x in t.columns
-            if str(x).strip().lower()
-            in ("project_code", "project code", "projectcode")
-        ),
-        None
+
+with col2:
+
+    company_code = st.text_input(
+        "Company Code",
+        value="DRC"
     )
 
-    project_code_col = next(
-        (
-            x for x in p.columns
-            if str(x).strip().lower()
-            in ("project_code", "project code", "projectcode")
-        ),
-        None
+
+st.markdown("---")
+
+
+# ============================================================
+# IMPORTANT
+# ============================================================
+
+st.info(
+    """
+    The stored procedure calculates @DaysBack from the current
+    SQL Server date.
+
+    Therefore this test first requests a large enough range
+    to discover the actual TimelineDate values.
+
+    After that, we manually check the 5-day period around
+    July 3, 2026.
+    """
+)
+
+
+# ============================================================
+# LOAD BUTTON
+# ============================================================
+
+if st.button(
+    "🔍 Check Employee Timeline",
+    type="primary"
+):
+
+    if not employee_id.strip():
+
+        st.warning(
+            "Please enter an Employee ID."
+        )
+
+        st.stop()
+
+
+    # --------------------------------------------------------
+    # Request enough historical data
+    # --------------------------------------------------------
+
+    days_back_from_sql = 121
+
+    with st.spinner(
+        "Loading timeline from SQL Server..."
+    ):
+
+        rows = load_employee_timeline(
+            employee_id=employee_id,
+            company_code=company_code,
+            days_back=days_back_from_sql
+        )
+
+
+    st.markdown("---")
+
+
+    # ========================================================
+    # BASIC RESULT
+    # ========================================================
+
+    st.subheader(
+        "1. Stored Procedure Result"
     )
 
-    status_col = next(
-        (
-            x for x in p.columns
-            if str(x).strip().lower() == "status"
-        ),
-        None
+    result_col1, result_col2, result_col3 = st.columns(3)
+
+    with result_col1:
+
+        st.metric(
+            "Employee ID",
+            employee_id
+        )
+
+    with result_col2:
+
+        st.metric(
+            "Company",
+            company_code
+        )
+
+    with result_col3:
+
+        st.metric(
+            "Rows Returned",
+            len(rows)
+        )
+
+
+    if not rows:
+
+        st.error(
+            "NO DATA RETURNED FROM STORED PROCEDURE."
+        )
+
+        st.stop()
+
+
+    df = pd.DataFrame(rows)
+
+
+    st.success(
+        f"Successfully received {len(df)} rows."
     )
 
-    print("\nDetected columns:")
-    print("Timeline Date   :", timeline_date_col)
-    print("Timeline Project:", timeline_project_col)
-    print("Project Code    :", project_code_col)
-    print("Status          :", status_col)
 
-    if not all([
-        timeline_date_col,
-        timeline_project_col,
-        project_code_col,
-        status_col
-    ]):
-        print("\nERROR: Required columns are missing.")
-        return
+    # ========================================================
+    # COLUMNS
+    # ========================================================
 
-    # -----------------------------
-    # Dates
-    # -----------------------------
+    st.subheader(
+        "2. Columns Returned"
+    )
 
-    t["TestDate"] = pd.to_datetime(
-        t[timeline_date_col],
+    st.write(
+        df.columns.tolist()
+    )
+
+
+    # ========================================================
+    # CHECK TIMELINE DATE
+    # ========================================================
+
+    st.subheader(
+        "3. Actual Timeline Date Range"
+    )
+
+
+    if "TimelineDate" not in df.columns:
+
+        st.error(
+            "TimelineDate column was NOT returned by the stored procedure."
+        )
+
+        st.stop()
+
+
+    df["TimelineDate"] = pd.to_datetime(
+        df["TimelineDate"],
         errors="coerce"
     )
 
-    t = t.dropna(subset=["TestDate"])
 
-    print("\nTimeline date range:")
-    print("Min:", t["TestDate"].min())
-    print("Max:", t["TestDate"].max())
+    valid_dates = (
+        df["TimelineDate"]
+        .dropna()
+    )
 
-    # -----------------------------
-    # Last 3 calendar months
-    # -----------------------------
 
-    today = pd.Timestamp.today().normalize()
+    null_date_count = (
+        df["TimelineDate"]
+        .isna()
+        .sum()
+    )
 
-    current_month = today.replace(day=1)
 
-    start_month = current_month - pd.DateOffset(months=2)
+    if valid_dates.empty:
 
-    print("\nToday:", today)
-    print("Start month:", start_month)
-    print("Current month:", current_month)
+        st.error(
+            "TimelineDate exists, but ALL TimelineDate values are NULL."
+        )
 
-    t = t[
-        (t["TestDate"] >= start_month) &
-        (t["TestDate"] <= today)
+        st.write(
+            df.head(20)
+        )
+
+        st.stop()
+
+
+    min_date = valid_dates.min()
+    max_date = valid_dates.max()
+
+
+    date_col1, date_col2, date_col3 = st.columns(3)
+
+
+    with date_col1:
+
+        st.metric(
+            "Minimum Timeline Date",
+            min_date.strftime("%Y-%m-%d")
+        )
+
+
+    with date_col2:
+
+        st.metric(
+            "Maximum Timeline Date",
+            max_date.strftime("%Y-%m-%d")
+        )
+
+
+    with date_col3:
+
+        st.metric(
+            "NULL Timeline Dates",
+            int(null_date_count)
+        )
+
+
+    # ========================================================
+    # ALL AVAILABLE DATES
+    # ========================================================
+
+    st.subheader(
+        "4. All Timeline Dates Returned"
+    )
+
+
+    date_summary = (
+        df.dropna(
+            subset=["TimelineDate"]
+        )
+        .assign(
+            Date=lambda x:
+                x["TimelineDate"].dt.strftime("%Y-%m-%d")
+        )
+        .groupby("Date")
+        .size()
+        .reset_index(
+            name="Rows"
+        )
+        .sort_values(
+            "Date",
+            ascending=False
+        )
+    )
+
+
+    st.dataframe(
+        date_summary,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+    # ========================================================
+    # HISTORICAL TEST DATE
+    # ========================================================
+
+    st.markdown("---")
+
+    st.subheader(
+        "5. Test Last 5 Days From July 3, 2026"
+    )
+
+
+    reference_date = pd.Timestamp(
+        "2026-07-03"
+    )
+
+
+    test_start_date = (
+        reference_date
+        - pd.Timedelta(days=4)
+    )
+
+
+    test_end_date = reference_date
+
+
+    st.info(
+        f"""
+        Reference Date: **{reference_date.strftime("%Y-%m-%d")}**
+
+        5-day timeline:
+
+        **{test_start_date.strftime("%Y-%m-%d")}**
+        →
+        **{test_end_date.strftime("%Y-%m-%d")}**
+        """
+    )
+
+
+    # ========================================================
+    # FILTER EXACT 5 DAYS
+    # ========================================================
+
+    five_day_df = df[
+        (df["TimelineDate"] >= test_start_date)
+        &
+        (df["TimelineDate"] <= test_end_date)
     ].copy()
 
-    print("\nTimeline rows:", len(t))
 
-    if t.empty:
-        print("No data found.")
-        return
+    # ========================================================
+    # 5-DAY SUMMARY
+    # ========================================================
 
-    # -----------------------------
-    # Project keys
-    # -----------------------------
-
-    t["ProjectKey"] = (
-        t[timeline_project_col]
-        .astype(str)
-        .str.strip()
+    st.subheader(
+        "6. Five-Day Timeline Summary"
     )
 
-    p["ProjectKey"] = (
-        p[project_code_col]
-        .astype(str)
-        .str.strip()
+
+    summary_dates = pd.date_range(
+        start=test_start_date,
+        end=test_end_date,
+        freq="D"
     )
 
-    # -----------------------------
-    # Status cleaning
-    # -----------------------------
 
-    p["StatusClean"] = (
-        p[status_col]
-        .fillna("Unknown")
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
+    summary_rows = []
 
-    status_map = {
-        "completed": "Completed",
-        "complete": "Completed",
-        "inprocess": "InProcess",
-        "in process": "InProcess",
-        "in-progress": "InProcess",
-        "in progress": "InProcess",
-        "delay": "Delayed",
-        "delayed": "Delayed"
-    }
 
-    p["StatusClean"] = (
-        p["StatusClean"]
-        .map(status_map)
-        .fillna(
-            p["StatusClean"].str.title()
-        )
-    )
+    for current_date in summary_dates:
 
-    # -----------------------------
-    # Project status
-    # -----------------------------
-
-    project_status = (
-        p[
-            [
-                "ProjectKey",
-                "StatusClean"
-            ]
-        ]
-        .drop_duplicates(
-            subset=["ProjectKey"]
-        )
-    )
-
-    # -----------------------------
-    # Merge
-    # -----------------------------
-
-    df = t.merge(
-        project_status,
-        on="ProjectKey",
-        how="left"
-    )
-
-    df["StatusClean"] = (
-        df["StatusClean"]
-        .fillna("Unknown")
-    )
-
-    # -----------------------------
-    # Month
-    # -----------------------------
-
-    df["MonthDate"] = (
-        df["TestDate"]
-        .dt.to_period("M")
-        .dt.to_timestamp()
-    )
-
-    df["Month"] = (
-        df["MonthDate"]
-        .dt.strftime("%b %Y")
-    )
-
-    # -----------------------------
-    # Count unique projects
-    # -----------------------------
-
-    monthly_status = (
-        df.groupby(
-            [
-                "MonthDate",
-                "Month",
-                "StatusClean"
-            ]
-        )["ProjectKey"]
-        .nunique()
-        .reset_index(
-            name="ProjectCount"
-        )
-    )
-
-    monthly_status = monthly_status.sort_values(
-        ["MonthDate", "StatusClean"]
-    )
-
-    # -----------------------------
-    # PRINT RESULT
-    # -----------------------------
-
-    print("\n" + "=" * 60)
-    print("MONTHLY STATUS")
-    print("=" * 60)
-
-    print(
-        monthly_status.to_string(
-            index=False
-        )
-    )
-
-    # -----------------------------
-    # Months
-    # -----------------------------
-
-    available_months = pd.date_range(
-        start=start_month,
-        end=current_month,
-        freq="MS"
-    )
-
-    month_labels = [
-        month.strftime("%b %Y")
-        for month in available_months
-    ]
-
-    # -----------------------------
-    # Print Completed trend
-    # -----------------------------
-
-    print("\n" + "=" * 60)
-    print("COMPLETED LINE VALUES")
-    print("=" * 60)
-
-    completed_values = []
-
-    for month in available_months:
-
-        temp = monthly_status[
-            (monthly_status["MonthDate"] == month) &
-            (monthly_status["StatusClean"] == "Completed")
+        day_df = five_day_df[
+            five_day_df["TimelineDate"].dt.normalize()
+            == current_date
         ]
 
-        if temp.empty:
-            count = 0
-        else:
-            count = int(
-                temp["ProjectCount"].sum()
-            )
 
-        completed_values.append(count)
+        summary_rows.append(
+            {
+                "Date":
+                    current_date.strftime("%Y-%m-%d"),
 
-        print(
-            f"{month.strftime('%b %Y')} "
-            f"-> Completed: {count}"
+                "Rows":
+                    len(day_df),
+
+                "Projects":
+                    (
+                        day_df["Project_Code"]
+                        .nunique()
+                        if "Project_Code" in day_df.columns
+                        else 0
+                    ),
+
+                "WorkAchieved":
+                    (
+                        day_df["WorkAchieved"]
+                        .notna()
+                        .sum()
+                        if "WorkAchieved" in day_df.columns
+                        else 0
+                    )
+            }
         )
 
-    # -----------------------------
-    # Create chart
-    # -----------------------------
 
-    fig = go.Figure()
-
-    statuses = [
-        "Completed",
-        "InProcess",
-        "Delayed"
-    ]
-
-    # Add any additional statuses
-    existing_statuses = (
-        monthly_status["StatusClean"]
-        .unique()
-        .tolist()
+    five_day_summary = pd.DataFrame(
+        summary_rows
     )
 
-    for status in existing_statuses:
 
-        if status not in statuses:
-            statuses.append(status)
-
-    # -----------------------------
-    # Stacked bars
-    # -----------------------------
-
-    for status in statuses:
-
-        values = []
-
-        for month in available_months:
-
-            temp = monthly_status[
-                (monthly_status["MonthDate"] == month) &
-                (monthly_status["StatusClean"] == status)
-            ]
-
-            if temp.empty:
-                values.append(0)
-            else:
-                values.append(
-                    int(temp["ProjectCount"].sum())
-                )
-
-        fig.add_trace(
-            go.Bar(
-                x=month_labels,
-                y=values,
-                name=status
-            )
-        )
-
-    # -----------------------------
-    # Completed trend line
-    # -----------------------------
-
-    fig.add_trace(
-        go.Scatter(
-            x=month_labels,
-            y=completed_values,
-            name="Completed Trend",
-            mode="lines+markers",
-            line=dict(
-                width=3
-            ),
-            marker=dict(
-                size=9
-            )
-        )
-    )
-
-    # -----------------------------
-    # Layout
-    # -----------------------------
-
-    fig.update_layout(
-        title="Project Status - Last 3 Months",
-
-        barmode="stack",
-
-        xaxis=dict(
-            title="Month",
-            categoryorder="array",
-            categoryarray=month_labels
-        ),
-
-        yaxis=dict(
-        title="",
-        showticklabels=False,
-        showgrid=False,
-        zeroline=False
-        ),
-
-        legend=dict(
-            orientation="h",
-            y=1.12,
-            x=0
-        ),
-
-        height=450,
-
-        margin=dict(
-            l=20,
-            r=20,
-            t=70,
-            b=20
-        ),
-
-        hovermode="x unified",
-
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)"
-    )
-
-    st.plotly_chart(
-        fig,
+    st.dataframe(
+        five_day_summary,
         use_container_width=True,
-        config={
-            "displayModeBar": False
-        }
-    )
-if __name__ == "__main__":
-
-    employee_id = "5732"
-    company_code = "DRC"
-
-    rows = load_employee_timeline(
-        employee_id=employee_id,
-        company_code=company_code,
-        days_back=121
+        hide_index=True
     )
 
-    print("\n" + "=" * 60)
-    print("ROWS FROM STORED PROCEDURE")
-    print("=" * 60)
 
-    print("Total rows:", len(rows))
+    # ========================================================
+    # TOTAL 5-DAY ROWS
+    # ========================================================
 
-    if rows:
+    st.metric(
+        "Total Rows in July 3 Five-Day Window",
+        len(five_day_df)
+    )
 
-        df = pd.DataFrame(rows)
 
-        print("\nColumns:")
-        print(df.columns.tolist())
+    # ========================================================
+    # ACTUAL FIVE-DAY RECORDS
+    # ========================================================
 
-        print("\nFirst 10 rows:")
-        print(df.head(10).to_string())
+    st.subheader(
+        "7. Actual Records From June 29 - July 3"
+    )
 
-        print("\nTimeline dates:")
-        print(
-            pd.to_datetime(
-                df["TimelineDate"],
-                errors="coerce"
-            ).describe()
+
+    if five_day_df.empty:
+
+        st.error(
+            """
+            ❌ NO RECORDS FOUND IN THIS FIVE-DAY PERIOD.
+
+            This means the stored procedure result does not
+            contain TimelineDate values between June 29 and
+            July 3, 2026 for this employee/company.
+            """
         )
-
-        # Your function needs t and p.
-        # The SP gives us one combined dataframe,
-        # so use the same dataframe for both.
-        t = df.copy()
-        p = df.copy()
-
-        test_past_3_months_trend(t, p)
 
     else:
-        print("NO DATA RETURNED FROM STORED PROCEDURE")
+
+        st.success(
+            f"Found {len(five_day_df)} records."
+        )
+
+
+        display_df = five_day_df.copy()
+
+
+        display_df["TimelineDate"] = (
+            display_df["TimelineDate"]
+            .dt.strftime("%Y-%m-%d")
+        )
+
+
+        preferred_columns = [
+            "TimelineDate",
+            "StartTime",
+            "EndTime",
+            "TimeCount",
+            "WorkAchieved",
+            "Status",
+            "Project_Code",
+            "Project_Name",
+            "Master_Code",
+            "Emp_No",
+            "Emp_Comp_No",
+            "EmployeeName",
+            "CompanyName"
+        ]
+
+
+        available_columns = [
+            column
+            for column in preferred_columns
+            if column in display_df.columns
+        ]
+
+
+        if available_columns:
+
+            st.dataframe(
+                display_df[
+                    available_columns
+                ],
+                use_container_width=True,
+                hide_index=True
+            )
+
+        else:
+
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+
+    # ========================================================
+    # EMPLOYEE CHECK
+    # ========================================================
+
+    st.subheader(
+        "8. Employee Validation"
+    )
+
+
+    employee_columns = [
+        column
+        for column in [
+            "Emp_No",
+            "Emp_Comp_No",
+            "EmployeeName",
+            "CompanyName"
+        ]
+        if column in five_day_df.columns
+    ]
+
+
+    if employee_columns and not five_day_df.empty:
+
+        st.dataframe(
+            five_day_df[
+                employee_columns
+            ].drop_duplicates(),
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+    # ========================================================
+    # PROJECT CHECK
+    # ========================================================
+
+    if not five_day_df.empty and "Project_Code" in five_day_df.columns:
+
+        st.subheader(
+            "9. Projects Found In Five-Day Timeline"
+        )
+
+
+        project_columns = [
+            column
+            for column in [
+                "Project_Code",
+                "Project_Name",
+                "Status",
+                "TimelineDate",
+                "WorkAchieved",
+                "TimeCount"
+            ]
+            if column in five_day_df.columns
+        ]
+
+
+        project_df = (
+            five_day_df[
+                project_columns
+            ]
+            .copy()
+        )
+
+
+        if "TimelineDate" in project_df.columns:
+
+            project_df["TimelineDate"] = (
+                project_df["TimelineDate"]
+                .dt.strftime("%Y-%m-%d")
+            )
+
+
+        st.dataframe(
+            project_df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+    # ========================================================
+    # RAW DATA
+    # ========================================================
+
+    with st.expander(
+        "🔎 View All Raw Stored Procedure Data"
+    ):
+
+        raw_df = df.copy()
+
+        if "TimelineDate" in raw_df.columns:
+
+            raw_df["TimelineDate"] = (
+                raw_df["TimelineDate"]
+                .dt.strftime("%Y-%m-%d")
+            )
+
+
+        st.dataframe(
+            raw_df,
+            use_container_width=True,
+            hide_index=True
+        )

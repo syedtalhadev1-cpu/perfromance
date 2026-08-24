@@ -1,5 +1,4 @@
 import os, html
-from textwrap import dedent
 from datetime import date
 import pyodbc
 import pandas as pd
@@ -43,10 +42,12 @@ st.markdown('''<style>
 .kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.kpi-card{background:var(--p2);border:1px solid var(--border);border-radius:12px;padding:14px;min-height:105px}.kpi-icon{font-size:15px;margin-bottom:9px}.kpi-value{color:var(--text);font-size:23px;font-weight:750}.kpi-label{color:var(--muted);font-size:10.5px;margin-top:7px}
 .section-title{margin:25px 0 12px}.chart-title{color:#e8eaf0;font-size:13px;font-weight:650;margin-bottom:7px}
 .focus-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;min-height:140px}.danger{border-top:2px solid var(--coral)}.warning{border-top:2px solid var(--amber)}.info{border-top:2px solid var(--indigo)}.focus-top{display:flex;justify-content:space-between;color:var(--muted);font-size:9.5px;text-transform:uppercase}.focus-name{color:var(--text);font-size:14px;font-weight:650;margin:14px 0}.track{height:6px;background:#202533;border-radius:100px;overflow:hidden}.fill{height:100%;background:linear-gradient(90deg,var(--indigo),var(--teal))}.focus-meta{display:flex;justify-content:space-between;color:var(--muted);font-size:9.5px;margin-top:8px}
-.timeline-day{position:relative;margin-left:10px;padding-left:28px;padding-bottom:20px;border-left:2px solid var(--border)}.timeline-dot{position:absolute;left:-7px;top:0;width:12px;height:12px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 3px var(--panel)}.timeline-date{color:var(--text);font-size:13px;font-weight:700;margin-bottom:9px}.timeline-date span{color:#575e72;font-size:10px;margin-left:5px}.timeline-item{display:grid;grid-template-columns:125px 1fr 150px;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:7px}.timeline-time{color:var(--teal);font-size:10.5px;font-weight:650}.timeline-action{color:var(--text);font-size:11.5px;font-weight:650}
-.timeline-work{color:var(--muted);font-size:9.5px;margin-top:3px;white-space:pre-wrap;line-height:1.4}
-.timeline-scroll{height:450px;overflow-y:auto;padding-right:8px;box-sizing:border-box}
-
+.timeline-day{position:relative;margin-left:10px;padding-left:28px;padding-bottom:20px;border-left:2px solid var(--border)}.timeline-dot{position:absolute;left:-7px;top:0;width:12px;height:12px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 3px var(--panel)}.timeline-date{color:var(--text);font-size:13px;font-weight:700;margin-bottom:9px}.timeline-date span{color:#575e72;font-size:10px;margin-left:5px}.timeline-item{display:grid;grid-template-columns:125px 1fr 150px;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:7px}.timeline-time{color:var(--teal);font-size:10.5px;font-weight:650}.timeline-action{color:var(--text);font-size:11.5px;font-weight:650}.timeline-work{color:var(--muted);font-size:9.5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.timeline-right{display:flex;justify-content:flex-end;gap:7px;color:var(--muted);font-size:9.5px}.pill{background:var(--p2);border:1px solid var(--border);border-radius:30px;padding:3px 7px}
+@media(max-width:800px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.timeline-item{grid-template-columns:1fr}.timeline-right{justify-content:flex-start}}
+.focus-expand{
+    width:100%;
+    margin:0;
+    padding:0;
     border:0;
 }
 
@@ -341,9 +342,6 @@ def chart_employee_focus_hours(focus_imp):
         if not x:
             continue
 
-        # ==========================================
-        # EVERYTHING BELOW IS NOW INSIDE THE LOOP
-        # ==========================================
         responsible = txt(x.get("Responsible"), "").strip()
         if responsible.lower() in ("nan", "none", "null", ""):
             responsible = ""
@@ -378,7 +376,6 @@ def chart_employee_focus_hours(focus_imp):
             "Cost": num(x.get("Cost")),
             "Responsible": responsible
         })
-        # ==========================================
 
     d = pd.DataFrame(rows)
 
@@ -390,7 +387,6 @@ def chart_employee_focus_hours(focus_imp):
     d["UsedHours"] = pd.to_numeric(d["UsedHours"], errors="coerce").fillna(0)
     d["Cost"] = pd.to_numeric(d["Cost"], errors="coerce").fillna(0)
 
-    # Label them P1, P2, P3 on the bottom of the chart
     d["Project"] = [f"P{i + 1}" for i in range(len(d))]
 
     custom = d[["Project_Name", "Responsible", "Cost", "AllocatedHours", "UsedHours"]].to_numpy()
@@ -434,7 +430,7 @@ def chart_employee_focus_hours(focus_imp):
         hovermode="closest",
         xaxis=dict(
             title=None,
-            showticklabels=True, # Changed to True so you can see P1, P2
+            showticklabels=True,
             showgrid=False,
             zeroline=False
         ),
@@ -610,9 +606,6 @@ def employee_focus_cards(imp,title,p):
         cost=num(x.get("Cost"))
         members=x.get("AssignedMembers",x.get("Assigned_Members",x.get("Members",0)))
         
-        # ---------------------------------------------------------
-        # THIS IS WHERE 'p' IS USED TO GET THE CORRECT RESPONSIBLE
-        # ---------------------------------------------------------
         proj_code = x.get("Project_Code")
         responsible = "Not Assigned"
         
@@ -621,10 +614,8 @@ def employee_focus_cards(imp,title,p):
             if not match.empty:
                 responsible = str(match['Responsible'].iloc[0])
                 
-        # Fallback just in case it's still empty
         if pd.isna(responsible) or responsible == "" or responsible == "Not Assigned":
             responsible = txt(x.get("Responsible", x.get("Employee", x.get("Team_Res"))), "Not Assigned")
-        # ---------------------------------------------------------
 
         with col:
             st.markdown(f'''
@@ -648,42 +639,21 @@ def employee_focus_cards(imp,title,p):
 <div class="focus-hint">Click to collapse</div>
 </details>
 ''',unsafe_allow_html=True)
-                   
-def visual_timelines(t):
-    st.markdown('<div class="section-title">Daily Work Timeline</div>',unsafe_allow_html=True)
-    if t.empty:st.info('No daily timeline records found.');return
-    d=t.copy();rename={}
-    for c in d.columns:
-        k=str(c).lower().strip()
-        if k in ('date','timelinedate','timeline date'):rename[c]='Date'
-        elif k in ('action','action / sub-project','action name','sub-project'):rename[c]='Action'
-        elif k=='start':rename[c]='Start'
-        elif k=='end':rename[c]='End'
-        elif k in ('time logged','dailytimespent','daily time spent'):rename[c]='Duration'
-        elif k in ('work achieved','workachieved'):rename[c]='Work'
-        elif k in ('status','dailyreportstatus'):rename[c]='Status'
-    d=d.rename(columns=rename);d['Date']=pd.to_datetime(d['Date'],errors='coerce');d=d.dropna(subset=['Date']).sort_values('Date',ascending=False)
-    for day,g in d.groupby(d.Date.dt.date,sort=False):
-        st.markdown(f'<div class="timeline-day"><div class="timeline-dot"></div><div class="timeline-date">{pd.Timestamp(day):%d %b %Y}<span>{pd.Timestamp(day):%a}</span></div>',unsafe_allow_html=True)
-        for _,r in g.iterrows():
-            st.markdown(f'<div class="timeline-item"><div class="timeline-time">{html.escape(txt(r.get("Start"),""))} → {html.escape(txt(r.get("End"),""))}</div><div><div class="timeline-action">{html.escape(txt(r.get("Action"),"Work Activity"))}</div><div class="timeline-work">{html.escape(txt(r.get("Work"),"Work activity recorded"))}</div></div><div class="timeline-right"><span>{html.escape(txt(r.get("Duration"),""))}</span><span class="pill">{html.escape(txt(r.get("Status"),"Recorded"))}</span></div></div>',unsafe_allow_html=True)
-        st.markdown('</div>',unsafe_allow_html=True)
 
 # ============================================================
-# ADD THESE TWO FUNCTIONS HERE (ABOVE chart_past_3_months_trend)
+# NEW PARENT-ACTION RESOLVER & VISUAL TIMELINE FUNCTIONS
 # ============================================================
 
 def resolve_timeline_parent_child_mapping(df):
     """
-    Cleans timeline inputs and resolves the parent-action mapping 
-    by matching Master_Code to Project_Code.
+    New helper: Resolves the relationship between Master_Code and Project_Code
+    without modifying any existing functions.
     """
     if df.empty:
         return df
 
     d = df.copy()
     
-    # Build a lookup dictionary of Project Codes to Project Names
     project_lookup = {}
     for _, r in d.iterrows():
         p_code = str(r.get("Project_Code", "")).strip()
@@ -696,7 +666,6 @@ def resolve_timeline_parent_child_mapping(df):
         master_code = str(r.get("Master_Code", "")).strip()
         project_name = str(r.get("Project_Name", "")).strip()
 
-        # If the action has a valid parent project, show 'PARENT • ACTION'
         if master_code and master_code in project_lookup:
             parent_project_name = project_lookup[master_code]
             resolved_titles.append(f"{parent_project_name.upper()} • {project_name.upper()}")
@@ -706,34 +675,36 @@ def resolve_timeline_parent_child_mapping(df):
     d["ResolvedTitle"] = resolved_titles
     return d
 
-def visual_timeline(t, max_height=450):
-    """
-    Renders a unified, scrollable vertical timeline. All elements are wrapped 
-    inside a continuous container to keep the timeline track straight and unbroken.
-    """
+def visual_timeline(t, show_header=False, max_height=380):
+    if show_header:
+        st.markdown('<div class="section-title">Daily Work Timeline</div>', unsafe_allow_html=True)
+        
     if t.empty:
         st.info('No daily timeline records found.')
         return
 
-    # Process relationships
     d = resolve_timeline_parent_child_mapping(t)
 
-    # Standardize column naming conventions
-    rename_map = {}
+    rename = {}
     for c in d.columns:
         k = str(c).lower().strip()
-        if k in ('date', 'timelinedate', 'timeline date', 'dailyworkdate'): rename_map[c] = 'Date'
-        elif k in ('start', 'starttime'): rename_map[c] = 'Start'
-        elif k in ('end', 'endtime'): rename_map[c] = 'End'
-        elif k in ('time logged', 'dailytimespent', 'daily time spent', 'timecount'): rename_map[c] = 'Duration'
-        elif k in ('work achieved', 'workachieved'): rename_map[c] = 'Work'
-        elif k in ('status', 'dailyreportstatus'): rename_map[c] = 'Status'
+        if k in ('date', 'timelinedate', 'timeline date', 'dailyworkdate'):
+            rename[c] = 'Date'
+        elif k in ('start', 'starttime'):
+            rename[c] = 'Start'
+        elif k in ('end', 'endtime'):
+            rename[c] = 'End'
+        elif k in ('time logged', 'dailytimespent', 'daily time spent', 'timecount'):
+            rename[c] = 'Duration'
+        elif k in ('work achieved', 'workachieved'):
+            rename[c] = 'Work'
+        elif k in ('status', 'dailyreportstatus'):
+            rename[c] = 'Status'
 
-    d = d.rename(columns=rename_map)
+    d = d.rename(columns=rename)
     d['Date'] = pd.to_datetime(d['Date'], errors='coerce')
     d = d.dropna(subset=['Date']).sort_values('Date', ascending=False)
 
-    # Inline time calculations
     def parse_to_minutes(time_val):
         if not isinstance(time_val, str) or ":" not in time_val:
             return 0
@@ -744,80 +715,59 @@ def visual_timeline(t, max_height=450):
             return 0
 
     def format_to_hours(total_minutes):
-        return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+        return f"{hours:02d}:{minutes:02d}"
 
-    # Build the HTML using a list join for speed and efficiency
-    html_buffer = []
-    
-    # 1. Scrollable wrapper
-    html_buffer.append(f'<div class="timeline-scroll" style="height: {max_height}px;">')
-    
-    # 2. Continuous timeline line wrapper (replaces broken border-left lines)
-    html_buffer.append('<div style="position: relative; border-left: 2px solid var(--border); margin-left: 15px; padding-left: 20px;">')
+    timeline_html = f'<div style="max-height: {max_height}px; overflow-y: auto; padding-right: 8px;">'
 
-    # Group and render daily activities
     for day, g in d.groupby(d.Date.dt.date, sort=False):
         total_mins = g["Duration"].astype(str).apply(parse_to_minutes).sum()
         formatted_total = format_to_hours(total_mins)
 
-        # Day Group Node
-        html_buffer.append(
-            f'<div style="position:relative;margin-bottom:24px;">'
-            f'<div style="position:absolute;left:-27px;top:3px;width:12px;height:12px;'
-            f'border-radius:50%;background:var(--teal);box-shadow:0 0 6px var(--teal);"></div>'
-            f'<div class="timeline-date" style="margin-bottom:12px;">'
-            f'{pd.Timestamp(day):%d %b %Y} '
-            f'<span>{pd.Timestamp(day):%a}</span>'
-            f'<span style="float:right;color:var(--muted);font-weight:400;font-size:11px;">'
-            f'Total: {formatted_total} hrs</span></div>'
-        )
+        timeline_html += f"""
+        <div class="timeline-day">
+            <div class="timeline-dot"></div>
+            <div class="timeline-date">
+                {pd.Timestamp(day):%d %b %Y}<span>{pd.Timestamp(day):%a}</span>
+                <span style="float: right; color: var(--muted); font-weight: 400; font-size: 11px;">Total: {formatted_total} hrs</span>
+            </div>
+        """
 
-        # Items within the day
         for _, r in g.iterrows():
             resolved_title = r.get("ResolvedTitle", "RECORDED WORK ACTIVITY")
             start_time = html.escape(txt(r.get("Start"), ""))
             end_time = html.escape(txt(r.get("End"), ""))
             time_range = f"{start_time} → {end_time}" if start_time or end_time else "Activity Logged"
 
-            html_buffer.append(
-                f'<div class="timeline-item" style="margin-bottom:8px;">'
-                f'<div class="timeline-time">{time_range}</div>'
-                f'<div><div class="timeline-action">{html.escape(resolved_title)}</div>'
-                f'<div class="timeline-work">{html.escape(txt(r.get("Work"), "Work activity recorded"))}</div></div>'
-                f'<div class="timeline-right"><span>{html.escape(txt(r.get("Duration"), ""))}</span>'
-                f'<span class="pill">{html.escape(txt(r.get("Status"), "Recorded"))}</span></div></div>'
-            )
-            
-        html_buffer.append('</div>') # Close Day Group Node
+            timeline_html += f"""
+            <div class="timeline-item">
+                <div class="timeline-time">{time_range}</div>
+                <div>
+                    <div class="timeline-action">{html.escape(resolved_title)}</div>
+                    <div class="timeline-work">{html.escape(txt(r.get("Work"), "Work activity recorded"))}</div>
+                </div>
+                <div class="timeline-right">
+                    <span>{html.escape(txt(r.get("Duration"), ""))}</span>
+                    <span class="pill">{html.escape(txt(r.get("Status"), "Recorded"))}</span>
+                </div>
+            </div>
+            """
+        timeline_html += '</div>'
 
-    html_buffer.append('</div>') # Close continuous line wrapper
-    html_buffer.append('</div>') # Close scrollable wrapper
+    timeline_html += '</div>'
+    st.markdown(timeline_html, unsafe_allow_html=True)
 
-    st.markdown(dedent("".join(html_buffer)), unsafe_allow_html=True)
 def chart_past_3_months_trend(trend):
-
     if trend.empty:
         st.info("No project trend data available.")
         return
 
-    available_months = sorted(
-        trend["MonthDate"].unique()
-    )
-
-    month_labels = [
-        pd.Timestamp(m).strftime("%b %Y")
-        for m in available_months
-    ]
+    available_months = sorted(trend["MonthDate"].unique())
+    month_labels = [pd.Timestamp(m).strftime("%b %Y") for m in available_months]
 
     fig = go.Figure()
-
-    statuses = [
-        "Completed",
-        "InProcess",
-        "Delayed"
-    ]
-
-    # Status colors
+    statuses = ["Completed", "InProcess", "Delayed"]
     status_colors = {
         "Completed": "#2DD9C7",
         "InProcess": "#4E9AF5",
@@ -825,68 +775,31 @@ def chart_past_3_months_trend(trend):
         "Unknown": "#6C757D"
     }
 
-    # Add other statuses if they exist
     for status in trend["StatusClean"].unique():
-
         if status not in statuses:
             statuses.append(status)
-
         if status not in status_colors:
             status_colors[status] = "#888888"
 
-    # -------------------------
-    # Stacked bars
-    # -------------------------
-
     for status in statuses:
-
         values = []
-
         for month in available_months:
-
-            temp = trend[
-                (trend["MonthDate"] == month) &
-                (trend["StatusClean"] == status)
-            ]
-
-            if temp.empty:
-                values.append(0)
-            else:
-                values.append(
-                    int(temp["ProjectCount"].sum())
-                )
+            temp = trend[(trend["MonthDate"] == month) & (trend["StatusClean"] == status)]
+            values.append(int(temp["ProjectCount"].sum()) if not temp.empty else 0)
 
         fig.add_trace(
             go.Bar(
                 x=month_labels,
                 y=values,
                 name=status,
-                marker_color=status_colors.get(
-                    status,
-                    "#888888"
-                )
+                marker_color=status_colors.get(status, "#888888")
             )
         )
 
-    # -------------------------
-    # Completed line
-    # -------------------------
-
     completed_values = []
-
     for month in available_months:
-
-        temp = trend[
-            (trend["MonthDate"] == month) &
-            (trend["StatusClean"] == "Completed")
-        ]
-
-        if temp.empty:
-            completed_values.append(0)
-        else:
-            completed_values.append(
-                int(temp["ProjectCount"].sum())
-            )
+        temp = trend[(trend["MonthDate"] == month) & (trend["StatusClean"] == "Completed")]
+        completed_values.append(int(temp["ProjectCount"].sum()) if not temp.empty else 0)
 
     fig.add_trace(
         go.Scatter(
@@ -894,64 +807,43 @@ def chart_past_3_months_trend(trend):
             y=completed_values,
             name="Completed Trend",
             mode="lines+markers",
-            line=dict(
-                color="#F5B84E",
-                width=3
-            ),
-            marker=dict(
-                size=7,
-                color="#F5B84E"
-            )
+            line=dict(color="#F5B84E", width=3),
+            marker=dict(size=7, color="#F5B84E")
         )
     )
 
-    # -------------------------
-    # Layout
-    # -------------------------
-
     fig.update_layout(
-        # 1. Update the title text AND pin it to the very top
         title=dict(
             text="Project Status - Last Month", 
-            y=0.98,  # Pushes title to the top edge
+            y=0.98,
             x=0.01
         ),
-
         barmode="stack",
-
         xaxis=dict(
             title="",
             categoryorder="array",
             categoryarray=month_labels
         ),
-
         yaxis=dict(
             title="",
             showticklabels=False,
             showgrid=False,
             zeroline=False
         ),
-
-        # 2. Perfectly align the legend below the title, above the graph
         legend=dict(
             orientation="h",
             yanchor="bottom", 
-            y=1.02,   # Positions it cleanly right above the bars
+            y=1.02,
             xanchor="left",
             x=0.01
         ),
-
-        height=450, # Made the chart slightly taller to fit everything
-
-        # 3. THIS IS THE MAGIC FIX: Increase the top margin (t=140) 
-        # This gives the 6 legend items plenty of empty space so they don't overlap!
+        height=450,
         margin=dict(
             l=20,
             r=20,
             t=140, 
             b=20
         ),
-
         hovermode="x unified",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)"
@@ -960,211 +852,14 @@ def chart_past_3_months_trend(trend):
     st.plotly_chart(
         fig,
         use_container_width=True,
-        config={
-            "displayModeBar": False
-        }
+        config={"displayModeBar": False}
     )
 
-# Sidebar
+# Sidebar Setup
 st.sidebar.markdown('**Performance Intelligence**\n\nProject & employee analytics')
 company=st.sidebar.selectbox('Company',['400','CRS','DRC',])
 mode=st.sidebar.radio('Dashboard',['Company','Employee','Project Performance'])
 today=date.today();fd=st.sidebar.date_input('From date',today.replace(month=1,day=1),max_value=today);td=st.sidebar.date_input('To date',today,min_value=fd,max_value=today)
 weekly_days=st.sidebar.slider('Weekly report window',7,90,7,7)
 if st.sidebar.button('Render Weekly PDF',use_container_width=True):
-    try: generate_weekly_report_pdf(company,weekly_days,'static/weekly_reports');st.success('Weekly PDF generated.')
-    except Exception as e:st.error(f'Could not generate weekly PDF: {e}')
-
-rows=load_company_data(company,fd.isoformat(),td.isoformat());df=clean_rows(rows)
-if df.empty:st.warning('No records returned for the selected filters.');st.stop()
-
-# Employee selector
-employee_id=None;selected_employee=None
-if mode in ['Employee','Project Performance']:
-    opts=(df[['EmployeeId','Employee']].dropna().assign(EmployeeId=lambda x:x.EmployeeId.astype(str).str.replace(r'\.0$','',regex=True).str.strip(),Employee=lambda x:x.Employee.astype(str).str.strip()).drop_duplicates().sort_values('Employee').to_dict('records'))
-    if not opts:st.warning('No employees found.');st.stop()
-    selected_employee=st.sidebar.selectbox('Employee',opts,format_func=lambda x:f"{x['Employee']} ({x['EmployeeId']})");employee_id=selected_employee['EmployeeId']
-
-# Employee Dashboard
-if mode=='Employee':
-    days=st.sidebar.slider('Timeline days',7,90,30,7)
-    ed=get_employee_timeline_dashboard(employee_id,company,days); ek=ed.get('summary',{})
-    edf=clean_timeline_rows(load_employee_important_project_data(employee_id,company)); imp=get_employee_important_projects(edf); t=pd.DataFrame(ed.get('timeline_records',[]));p=project_df(edf)
-    
-    # ==========================================
-    # 🚀 FIX: Replace ID with Name for the Employee
-    # ==========================================
-    emp_name = selected_employee.get("Employee", str(employee_id))
-    
-    # Fix 'p' (Used for Focus Cards)
-    if not p.empty and 'Responsible' in p.columns:
-        p['Responsible'] = p['Responsible'].astype(str).replace({str(employee_id): emp_name})
-        
-    # Fix 'imp' (Used for Charts and Tooltips)
-    for k, v in imp.items():
-        if isinstance(v, dict):
-            for field in ["Responsible", "Employee", "Team_Res"]:
-                if str(v.get(field)).strip() == str(employee_id).strip():
-                    v[field] = emp_name
-                    v["Responsible"] = emp_name
-    # ==========================================
-
-    st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Employee Performance</div><div class="header-title">👤 {html.escape(txt(selected_employee.get("Employee"),"Employee"))}</div><div class="header-sub">Employee ID {html.escape(str(employee_id))} · Company {company} · Last {days} days</div></div><div class="live">.</div></div>',unsafe_allow_html=True)
-    a,b=st.columns([1.05,1.7],gap='large')
-    with a:
-        with st.container(border=True):st.markdown('<div class="panel-label">✦ Employee Overview</div><div class="ai-copy">This view combines assigned projects, actions and actual daily work logs. The analytics below are calculated from the existing Employee model data.</div>',unsafe_allow_html=True)
-    with b:st.markdown(cards([('📁','Projects',ek.get('total_projects',0)),('⚡','Actions',ek.get('total_actions',0)),('✅','Completed',ek.get('completed_projects',0)),('⏱','Remaining',ek.get('remaining_projects',0)),('🏆','Achievement',f"{ek.get('achievement_pct',0)}%"),('📅','Timeline Days',days)]),unsafe_allow_html=True)
-    
-    focus_imp={}
-    for k in ['urgent_project','high_cost_project','historical_project']:
-      if imp.get(k):
-        focus_imp[k]=imp[k]
-    if not focus_imp and imp.get('recent_project'):
-       focus_imp['recent_project']=imp['recent_project']
-       
-    employee_focus_cards(focus_imp,'Employee Focus Projects',p)
-    
-
-    st.markdown('<div class="section-title">Performance Analytics</div>',unsafe_allow_html=True)
-    c1,c2=st.columns(2,gap='large')
-    with c1:
-        #with st.container(border=True):st.markdown('<div class="chart-title">Project Progress</div>',unsafe_allow_html=True);chart_progress(p)
-        with st.container(border=True):st.markdown('<div class="chart-title">Work Status Distribution</div>',unsafe_allow_html=True);chart_status(t,p)
-    with c2:
-     with st.container(border=True):
-        st.markdown(
-            '<div class="chart-title">Allocated vs Used Hours</div>',
-            unsafe_allow_html=True
-        )
-        chart_employee_focus_hours(focus_imp)
-    c1,c2=st.columns(2,gap='large')
-    # Get project trend data
-    employee_rows = load_employee_timeline(
-       employee_id=employee_id,
-       company_code=company,
-       days_back=121
-    )
-
-    trend = get_past_3_months_status_trend(employee_rows)
-
-    # ========================================================
-    # PERFORMANCE TRENDS & DAILY TIMELINE SIDE-BY-SIDE
-    # ========================================================
-    st.markdown('<div class="section-title">Performance & Daily Worklogs</div>', unsafe_allow_html=True)
-    
-    c1, c2 = st.columns(2, gap="large")
-
-    with c1:
-        with st.container(border=True):
-            st.markdown(
-                '<div class="chart-title">Month Progress</div>',
-                unsafe_allow_html=True
-            )
-            # Render your untouched trend chart
-            chart_past_3_months_trend(trend)
-
-    with c2:
-        with st.container(border=True):
-            st.markdown(
-                '<div class="chart-title">Daily Work Timeline</div>',
-                unsafe_allow_html=True
-            )
-            # Render the container-wrapped vertical timeline matching the height of your chart
-            visual_timeline(t, max_height=450)
-            
-    st.stop()
-    #with c2:
-        #with st.container(border=True):st.markdown('<div class="chart-title">Allocated vs Used Hours</div>',unsafe_allow_html=True);chart_hours(p)
-    #st.markdown('<div class="section-title">Project Risk & Workload</div>',unsafe_allow_html=True)
-    #c1,c2=st.columns(2,gap='large')
-    #with c1:
-     #   with st.container(border=True):chart_risk(p)
-    #with c2:
-     #   with st.container(border=True):chart_workload(p)
-    # selected important project
-    #pm={};po=[]
-    #for k,l in [('urgent_project','🚨 Urgent'),('high_cost_project','💰 High Cost'),('historical_project','📅 Historical')]:
-     #   x=imp.get(k)
-      #  if x:lab=f'{l} - {x.get("Project_Name","Unnamed")}';po.append(lab);pm[lab]=x['Project_Code']
-    #if not po and imp.get('recent_project'):
-     #   x=imp['recent_project'];lab=f'🕒 Recent - {x.get("Project_Name","Unnamed")}';po.append(lab);pm[lab]=x['Project_Code']
-    #st.markdown('<div class="section-title">Project Explorer</div>',unsafe_allow_html=True)
-    #l,r=st.columns([.9,2],gap='large')
-    #with l:
-     #   with st.container(border=True):sel=st.radio('Project',po,label_visibility='collapsed') if po else None
-    #with r:
-     #   with st.container(border=True):
-      #      ep=get_employee_project_details(edf,pm[sel],employee_id) if sel else {'Actions':[]}
-       #     st.markdown(f'<div class="header-title" style="font-size:18px">{html.escape(txt(ep.get("Project_Name"),"Select a project"))}</div><div class="header-sub">Status: {html.escape(txt(ep.get("Status")))} · Deadline: {html.escape(txt(ep.get("Deadline")))} · Actions: {ep.get("Total_Actions_Logged",0)}</div>',unsafe_allow_html=True)
-    #visual_timeline(t)
-    #with st.expander('🔎 View detailed timeline records'):st.dataframe(t,use_container_width=True,hide_index=True)
-    #with st.expander('📝 View selected project work logs'):st.dataframe(pd.DataFrame(ep.get('Actions',[])),use_container_width=True,hide_index=True)
-    st.stop()
-
-# Project Performance AI
-if mode=='Project Performance':
-    raw=load_project_ai_data(company,employee_id,fd.isoformat(),td.isoformat())
-    if not raw:st.warning('No project performance records found.');st.stop()
-    tree=ProjectDataProcessor(raw).get_project_timeline_tree(exclude_completed=True)
-    if not tree:st.info('No incomplete projects found.');st.stop()
-    pdict={f"{x['Parent_Project_Name']} ({x['Parent_Project_Code']})":x for x in tree};label=st.radio('Active Project',list(pdict),horizontal=True);x=pdict[label]
-    members=set([str(x.get('EmployeeId')).strip()]) if x.get('EmployeeId') else set();members.update(str(x.get('Team_Support','')).split(','));members={m.strip() for m in members if m.strip() and m.strip().lower() not in ('nan','none')}
-    actions=x.get('Sub_Actions',[]);logs=sum((a.get('Timeline_Logs',[]) for a in actions),[]);allocated=num(x.get('AllocatedHours'));used=num(x.get('TotalProjectUsedHours'));usage=used/allocated*100 if allocated else 0;completed=sum('completed' in txt(a.get('Status')).lower() for a in actions);progress=completed/len(actions)*100 if actions else 0
-    st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Project Intelligence</div><div class="header-title">⚙️ {html.escape(txt(x.get("Parent_Project_Name"),"Project"))}</div><div class="header-sub">Employee {html.escape(str(employee_id))} · Company {company}</div></div><div class="live">● LIVE DATA</div></div>',unsafe_allow_html=True)
-    st.markdown(cards([('📁','Status',x.get('Status','N/A')),('👥','Active Team',len(members)),('⚡','Actions',len(logs)),('⏱','Allocated',f'{allocated:.1f} h'),('⚙️','Used',f'{used:.1f} h'),('📈','Usage',f'{usage:.1f}%')]),unsafe_allow_html=True)
-    c1,c2=st.columns(2,gap='large')
-    with c1:
-        f=go.Figure(go.Indicator(mode='gauge+number',value=progress,number={'suffix':'%','font':{'color':'#F4F6FB','size':34}},title={'text':'Sub-action completion','font':{'color':'#8A91A6'}},gauge={'axis':{'range':[0,100]},'bar':{'color':'#2DD9C7'},'bgcolor':'#171B26'}));f.update_layout(**layout(300));st.plotly_chart(f,use_container_width=True,config={'displayModeBar':False})
-    with c2:
-        u=pd.DataFrame({'Metric':['Allocated','Used'],'Hours':[allocated,used]});f=px.bar(u,x='Metric',y='Hours',text='Hours');f.update_traces(marker_color=['#6E7CF6','#2DD9C7'],texttemplate='%{text:.1f} h',textposition='outside');f.update_layout(**layout(300),showlegend=False);st.plotly_chart(f,use_container_width=True,config={'displayModeBar':False})
-    ad=[]
-    for a in actions:
-        ah=num(a.get('AllocatedHours'));uh=num(a.get('ActionUsedHours'));ap=uh/ah*100 if ah else (100 if 'completed' in txt(a.get('Status')).lower() else 0);ad.append({'Action':a.get('Action_Name','Unnamed'),'Status':a.get('Status','Unknown'),'Progress':ap,'Allocated':ah,'Used':uh})
-    if ad:
-        st.markdown('<div class="section-title">Sub-Actions & Milestones</div>',unsafe_allow_html=True);af=pd.DataFrame(ad);f=px.bar(af.sort_values('Progress'),x='Progress',y='Action',orientation='h',color='Status',text='Progress');f.update_traces(texttemplate='%{text:.0f}%',textposition='outside');f.update_layout(**layout(350),xaxis=dict(range=[0,110],title='Progress %'));st.plotly_chart(f,use_container_width=True,config={'displayModeBar':False});
-        with st.expander('View detailed sub-actions'):st.dataframe(af,use_container_width=True,hide_index=True)
-    logdf=pd.DataFrame([{'Date':l.get('TimelineDate'),'Action':a.get('Action_Name'),'Start':l.get('StartTime'),'End':l.get('EndTime'),'Duration':l.get('DailyTimeSpent'),'WorkAchieved':l.get('WorkAchieved'),'Status':l.get('DailyReportStatus'),'EmployeeId':l.get('ActionLoggedBy')} for a in actions for l in a.get('Timeline_Logs',[])])
-    visual_timeline(logdf)
-    with st.expander('🔎 View project timeline records'):st.dataframe(logdf,use_container_width=True,hide_index=True)
-    st.stop()
-
-# Company
-kpi=compute_kpis(df); es=employee_summary(df); impdf=clean_rows(load_important_project_data(company));imp=get_important_projects(impdf)
-st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Company Performance</div><div class="header-title">📊 Company {html.escape(company)}</div><div class="header-sub">{fd} → {td}</div></div><div class="live">● LIVE DATA</div></div>',unsafe_allow_html=True)
-l,r=st.columns([1.05,1.7],gap='large')
-with l:
-    with st.container(border=True):
-        st.markdown('<div class="panel-label">✦ AI Executive Summary</div>',unsafe_allow_html=True)
-        if st.button('✨ Generate AI Summary',use_container_width=True):
-            with st.spinner('Analyzing company performance...'):st.session_state.ai_summary=summarize_dashboard(kpi,imp,es.to_dict('records'),{'Employees':[],'Actions':[]})
-        st.markdown(f'<div class="ai-copy">{html.escape(st.session_state.get("ai_summary","Generate a summary to analyze company performance and risks.")).replace(chr(10),"<br>")}</div>',unsafe_allow_html=True)
-with r:
-    st.markdown(
-        cards([
-            ('📁', 'Projects', f"{kpi.get('total_projects', 0):,}"),
-            ('👥', 'Employees', f"{kpi.get('total_employees', 0):,}"),
-            ('✅', 'Completed', f"{kpi.get('completed_projects', 0):,}"),
-            ('⚡', 'Actions', f"{kpi.get('total_actions', 0):,}"),
-            ('🏆', 'Achievement', f"{kpi.get('achievement_pct', 0)}%"),
-            ('⏱', 'Remaining', f"{kpi.get('remaining_projects', 0):,}")
-        ]),
-        unsafe_allow_html=True
-    )
-
-focus_cards(imp, 'Company Focus Projects')
-focus_project_details(imp)
-
-st.markdown("<div style='height:35px'></div>",unsafe_allow_html=True)
-
-cp=project_df(impdf)
-c1,c2=st.columns(2,gap='large')
-with c1:
-    with st.container(border=True):st.markdown('<div class="chart-title">Project Progress</div>',unsafe_allow_html=True);chart_progress(cp)
-with c2:
-    with st.container(border=True):st.markdown('<div class="chart-title">Allocated vs Used Hours</div>',unsafe_allow_html=True);chart_hours(cp)
-if not es.empty:
-    val=next((c for c in ['TotalActions','Total_Actions','TotalActionsLogged'] if c in es.columns),None)
-    if val:
-        st.markdown('<div class="section-title">Employee Workload</div>',unsafe_allow_html=True);d=es.copy();d[val]=pd.to_numeric(d[val],errors='coerce').fillna(0);d=d.sort_values(val,ascending=False).head(12);f=px.bar(d,x=val,y='Employee',orientation='h',text=val);f.update_traces(marker_color='#6E7CF6',textposition='outside');f.update_layout(**layout(350),xaxis=dict(title='Actions',gridcolor='#252B3A'),yaxis=dict(title=None));st.plotly_chart(f,use_container_width=True,config={'displayModeBar':False})
-
-#with st.expander('🔎 View company source records'):st.dataframe(df,use_container_width=True,hide_index=True)
+    try
