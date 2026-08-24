@@ -1102,30 +1102,67 @@ if mode=='Employee':
     st.stop()
 
 # Project Performance AI
+# Project Performance AI
 if mode=='Project Performance':
     raw=load_project_ai_data(company,employee_id,fd.isoformat(),td.isoformat())
     if not raw:st.warning('No project performance records found.');st.stop()
+    
     tree=ProjectDataProcessor(raw).get_project_timeline_tree(exclude_completed=True)
     if not tree:st.info('No incomplete projects found.');st.stop()
-    pdict={f"{x['Parent_Project_Name']} ({x['Parent_Project_Code']})":x for x in tree};label=st.radio('Active Project',list(pdict),horizontal=True);x=pdict[label]
+    
+    pdict={f"{x['Parent_Project_Name']} ({x['Parent_Project_Code']})":x for x in tree}
+    
+    # 1. Moved Project selection to Sidebar as a Dropdown
+    label = st.sidebar.selectbox('Project', list(pdict))
+    x = pdict[label]
+    
     members=set([str(x.get('EmployeeId')).strip()]) if x.get('EmployeeId') else set();members.update(str(x.get('Team_Support','')).split(','));members={m.strip() for m in members if m.strip() and m.strip().lower() not in ('nan','none')}
     actions=x.get('Sub_Actions',[]);logs=sum((a.get('Timeline_Logs',[]) for a in actions),[]);allocated=num(x.get('AllocatedHours'));used=num(x.get('TotalProjectUsedHours'));usage=used/allocated*100 if allocated else 0;completed=sum('completed' in txt(a.get('Status')).lower() for a in actions);progress=completed/len(actions)*100 if actions else 0
+    
     st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Project Intelligence</div><div class="header-title">⚙️ {html.escape(txt(x.get("Parent_Project_Name"),"Project"))}</div><div class="header-sub">Employee {html.escape(str(employee_id))} · Company {company}</div></div><div class="live">● LIVE DATA</div></div>',unsafe_allow_html=True)
+    
     st.markdown(cards([('📁','Status',x.get('Status','N/A')),('👥','Active Team',len(members)),('⚡','Actions',len(logs)),('⏱','Allocated',f'{allocated:.1f} h'),('⚙️','Used',f'{used:.1f} h'),('📈','Usage',f'{usage:.1f}%')]),unsafe_allow_html=True)
-    c1,c2=st.columns(2,gap='large')
+    
+    # 2. Fixed spacing and alignment with bordered containers
+    # 2. Fixed spacing and alignment with bordered containers
+    c1, c2 = st.columns(2, gap='medium')
+    
     with c1:
-        f=go.Figure(go.Indicator(mode='gauge+number',value=progress,number={'suffix':'%','font':{'color':'#F4F6FB','size':34}},title={'text':'Sub-action completion','font':{'color':'#8A91A6'}},gauge={'axis':{'range':[0,100]},'bar':{'color':'#2DD9C7'},'bgcolor':'#171B26'}));f.update_layout(**layout(300));st.plotly_chart(f,use_container_width=True,config={'displayModeBar':False})
+        with st.container(border=True):
+            st.markdown('<div class="chart-title">Progress</div>', unsafe_allow_html=True)
+            f=go.Figure(go.Indicator(mode='gauge+number',value=progress,number={'suffix':'%','font':{'color':'#F4F6FB','size':34}},title={'text':'Sub-action completion','font':{'color':'#8A91A6'}},gauge={'axis':{'range':[0,100]},'bar':{'color':'#2DD9C7'},'bgcolor':'#171B26'}))
+            
+            # FIXED: Removed the extra margin argument here
+            f.update_layout(**layout(280)) 
+            
+            st.plotly_chart(f,use_container_width=True,config={'displayModeBar':False})
+            
     with c2:
-        u=pd.DataFrame({'Metric':['Allocated','Used'],'Hours':[allocated,used]});f=px.bar(u,x='Metric',y='Hours',text='Hours');f.update_traces(marker_color=['#6E7CF6','#2DD9C7'],texttemplate='%{text:.1f} h',textposition='outside');f.update_layout(**layout(300),showlegend=False);st.plotly_chart(f,use_container_width=True,config={'displayModeBar':False})
+        with st.container(border=True):
+            st.markdown('<div class="chart-title">Hours Utilization</div>', unsafe_allow_html=True)
+            u=pd.DataFrame({'Metric':['Allocated','Used'],'Hours':[allocated,used]})
+            f=px.bar(u,x='Metric',y='Hours',text='Hours')
+            f.update_traces(marker_color=['#6E7CF6','#2DD9C7'],texttemplate='%{text:.1f} h',textposition='outside')
+            
+            # FIXED: Removed the extra margin argument here
+            f.update_layout(**layout(280), showlegend=False, yaxis=dict(gridcolor='#252B3A'), xaxis=dict(title=''))
+            
+            st.plotly_chart(f,use_container_width=True,config={'displayModeBar':False})
+            
     ad=[]
     for a in actions:
         ah=num(a.get('AllocatedHours'));uh=num(a.get('ActionUsedHours'));ap=uh/ah*100 if ah else (100 if 'completed' in txt(a.get('Status')).lower() else 0);ad.append({'Action':a.get('Action_Name','Unnamed'),'Status':a.get('Status','Unknown'),'Progress':ap,'Allocated':ah,'Used':uh})
+    
     if ad:
         st.markdown('<div class="section-title">Sub-Actions & Milestones</div>',unsafe_allow_html=True);af=pd.DataFrame(ad);f=px.bar(af.sort_values('Progress'),x='Progress',y='Action',orientation='h',color='Status',text='Progress');f.update_traces(texttemplate='%{text:.0f}%',textposition='outside');f.update_layout(**layout(350),xaxis=dict(range=[0,110],title='Progress %'));st.plotly_chart(f,use_container_width=True,config={'displayModeBar':False});
         with st.expander('View detailed sub-actions'):st.dataframe(af,use_container_width=True,hide_index=True)
+        
     logdf=pd.DataFrame([{'Date':l.get('TimelineDate'),'Action':a.get('Action_Name'),'Start':l.get('StartTime'),'End':l.get('EndTime'),'Duration':l.get('DailyTimeSpent'),'WorkAchieved':l.get('WorkAchieved'),'Status':l.get('DailyReportStatus'),'EmployeeId':l.get('ActionLoggedBy')} for a in actions for l in a.get('Timeline_Logs',[])])
     visual_timeline(logdf)
-    with st.expander('🔎 View project timeline records'):st.dataframe(logdf,use_container_width=True,hide_index=True)
+    
+    with st.expander('🔎 View project timeline records'):
+        st.dataframe(logdf,use_container_width=True,hide_index=True)
+        
     st.stop()
 
 # Company
