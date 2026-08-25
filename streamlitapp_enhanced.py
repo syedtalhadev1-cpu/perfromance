@@ -794,6 +794,34 @@ def visual_timeline(t, max_height=450):
     html_buffer.append('</div>') # Close scrollable wrapper
 
     st.markdown(dedent("".join(html_buffer)), unsafe_allow_html=True)
+def calculate_real_progress(actions):
+    """Calculates average progress including partially completed sub-actions."""
+    if not actions:
+        return 0.0
+        
+    total_progress = 0.0
+    
+    for a in actions:
+        status = txt(a.get('Status')).lower()
+        ah = num(a.get('AllocatedHours'))
+        uh = num(a.get('ActionUsedHours'))
+        
+        # If it's completely finished, it gets 100%
+        if 'completed' in status:
+            action_prog = 100.0
+        # If it has hours allocated, calculate the partial percentage
+        elif ah > 0:
+            action_prog = (uh / ah) * 100.0
+            # Cap it at 100% so going over budget doesn't break the math
+            action_prog = min(action_prog, 100.0) 
+        # Otherwise, it hasn't started
+        else:
+            action_prog = 0.0
+            
+        total_progress += action_prog
+        
+    # Return the average progress of all sub-actions
+    return total_progress / len(actions)
 def chart_past_3_months_trend(trend):
 
     if trend.empty:
@@ -1117,14 +1145,25 @@ if mode=='Project Performance':
     x = pdict[label]
     
     members=set([str(x.get('EmployeeId')).strip()]) if x.get('EmployeeId') else set();members.update(str(x.get('Team_Support','')).split(','));members={m.strip() for m in members if m.strip() and m.strip().lower() not in ('nan','none')}
-    actions=x.get('Sub_Actions',[]);logs=sum((a.get('Timeline_Logs',[]) for a in actions),[]);allocated=num(x.get('AllocatedHours'));used=num(x.get('TotalProjectUsedHours'));usage=used/allocated*100 if allocated else 0;completed=sum('completed' in txt(a.get('Status')).lower() for a in actions);progress=completed/len(actions)*100 if actions else 0
+    actions = x.get('Sub_Actions', [])
+    logs = sum((a.get('Timeline_Logs', []) for a in actions), [])
+    allocated = num(x.get('AllocatedHours'))
+    used = num(x.get('TotalProjectUsedHours'))
+    usage = used / allocated * 100 if allocated else 0
+
+# CALL YOUR NEW FUNCTION HERE:
+    progress = calculate_real_progress(actions)
     
-    st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Project Intelligence</div><div class="header-title">⚙️ {html.escape(txt(x.get("Parent_Project_Name"),"Project"))}</div><div class="header-sub">Employee {html.escape(str(employee_id))} · Company {company}</div></div><div class="live">● LIVE DATA</div></div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Project Intelligence</div><div class="header-title">⚙️ {html.escape(txt(x.get("Parent_Project_Name"),"Project"))}</div><div class="header-sub">Employee {html.escape(str(employee_id))} · Company {company}</div></div><div class="live"> DATA</div></div>',unsafe_allow_html=True)
     
     st.markdown(cards([('📁','Status',x.get('Status','N/A')),('👥','Active Team',len(members)),('⚡','Actions',len(logs)),('⏱','Allocated',f'{allocated:.1f} h'),('⚙️','Used',f'{used:.1f} h'),('📈','Usage',f'{usage:.1f}%')]),unsafe_allow_html=True)
     
     # 2. Fixed spacing and alignment with bordered containers
     # 2. Fixed spacing and alignment with bordered containers
+    st.markdown(
+                    '<div class="chart-title">Status</div>',
+                    unsafe_allow_html=True
+                )
     c1, c2 = st.columns(2, gap='medium')
     
     with c1:
@@ -1202,6 +1241,8 @@ with c2:
 if not es.empty:
     val=next((c for c in ['TotalActions','Total_Actions','TotalActionsLogged'] if c in es.columns),None)
     if val:
-        st.markdown('<div class="section-title">Employee Workload</div>',unsafe_allow_html=True);d=es.copy();d[val]=pd.to_numeric(d[val],errors='coerce').fillna(0);d=d.sort_values(val,ascending=False).head(12);f=px.bar(d,x=val,y='Employee',orientation='h',text=val);f.update_traces(marker_color='#6E7CF6',textposition='outside');f.update_layout(**layout(350),xaxis=dict(title='Actions',gridcolor='#252B3A'),yaxis=dict(title=None));st.plotly_chart(f,use_container_width=True,config={'displayModeBar':False})
+        st.markdown(
+
+            '<div class="section-title">Employee Workload</div>',unsafe_allow_html=True);d=es.copy();d[val]=pd.to_numeric(d[val],errors='coerce').fillna(0);d=d.sort_values(val,ascending=False).head(12);f=px.bar(d,x=val,y='Employee',orientation='h',text=val);f.update_traces(marker_color='#6E7CF6',textposition='outside');f.update_layout(**layout(350),xaxis=dict(title='Actions',gridcolor='#252B3A'),yaxis=dict(title=None));st.plotly_chart(f,use_container_width=True,config={'displayModeBar':False})
 
 #with st.expander('🔎 View company source records'):st.dataframe(df,use_container_width=True,hide_index=True)
