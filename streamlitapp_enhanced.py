@@ -123,6 +123,18 @@ def num(v,d=0.0):
 def txt(v,d='N/A'):
     return d if v is None or pd.isna(v) else str(v)
 
+@st.cache_data(ttl=3600)
+def company_display_name(company_code):
+    try:
+        rows = load_company_data(company_code)
+        if rows:
+            name = rows[0].get('CompanyName')
+            if name and not pd.isna(name):
+                return str(name).strip()
+    except Exception:
+        pass
+    return company_code
+
 def cards(items):
     return '<div class="panel"><div class="panel-label">Key Metrics</div><div class="kpi-grid">'+''.join(f'<div class="kpi-card"><div class="kpi-icon">{i}</div><div class="kpi-value">{html.escape(str(v))}</div><div class="kpi-label">{html.escape(str(l))}</div></div>' for i,l,v in items)+'</div></div>'
 
@@ -149,7 +161,22 @@ def project_df(raw):
     if 'Project_Name' not in d:return pd.DataFrame()
     for c,default in [('Project_Code',''),('Status','Unknown'),('Deadline',pd.NaT),('AllocatedHours',0),('UsedHours',0),('Cost',0),('Team_Res',''),('Employee',''),('EmployeeId','')]:
         if c not in d:d[c]=default
-    for c in ['AllocatedHours','UsedHours','Cost']:d[c]=pd.to_numeric(d[c],errors='coerce').fillna(0)
+    for c in ['AllocatedHours','UsedHours']:
+        d[c]=d[c].map(ProjectDataProcessor._parse_time_to_hours)
+    d['Cost']=pd.to_numeric(d['Cost'],errors='coerce').fillna(0)
+    if 'TimelineDate' not in d.columns:
+        for alias in ('DailyWorkDate','WorkDate'):
+            if alias in d.columns:
+                d['TimelineDate']=d[alias]
+                break
+    if 'DailyTimeSpent' not in d.columns and 'TimeCount' in d.columns:
+        d['DailyTimeSpent']=d['TimeCount']
+    if {'Master_Code','TimelineDate','DailyTimeSpent'}.issubset(d.columns):
+        logged=d[d['TimelineDate'].notna()].copy()
+        logged['_LoggedHours']=logged['DailyTimeSpent'].apply(ProjectDataProcessor._parse_time_to_hours)
+        logged_hours=logged.groupby('Master_Code')['_LoggedHours'].sum()
+    else:
+        logged_hours=pd.Series(dtype='float64')
     d['Deadline']=pd.to_datetime(d['Deadline'],errors='coerce')
     d['EmployeeId']=d['EmployeeId'].astype(str).str.strip()
     d['Team_Res']=d['Team_Res'].astype(str).str.strip()
@@ -166,6 +193,9 @@ def project_df(raw):
         Cost=('Cost','max'),
         Responsible=('Responsible','first')
     ).reset_index()
+    p['_LoggedHours']=p['Project_Code'].map(logged_hours).fillna(0)
+    p['UsedHours']=p['UsedHours'].where(p['UsedHours']>0,p['_LoggedHours']).fillna(0)
+    p=p.drop(columns=['_LoggedHours'])
     p['Progress']=p['Status'].astype(str).str.lower().apply(lambda x:100.0 if 'completed' in x else 0.0)
     m=(p.Progress==0)&(p.AllocatedHours>0)
     p.loc[m,'Progress']=(p.loc[m,'UsedHours']/p.loc[m,'AllocatedHours']*100).clip(0,100)
@@ -489,7 +519,6 @@ def focus_cards(imp,title):
         status=txt(x.get("Status"),"Unknown")
         deadline=txt(x.get("DeadLine",x.get("Deadline")),"N/A")[:10]
         responsible=txt(x.get("Responsible",x.get("Employee")),"Not Assigned")
-        division=txt(x.get("Division"),"N/A")
         actions=x.get("TotalActions",x.get("Total_Action",x.get("Actions",0)))
         cost=num(x.get("Cost"))
         with col:
@@ -513,10 +542,6 @@ def focus_cards(imp,title):
                     <div class="focus-detail-item">
                         <span>RESPONSIBLE</span>
                         <strong>{html.escape(responsible)}</strong>
-                    </div>
-                    <div class="focus-detail-item">
-                        <span>DIVISION</span>
-                        <strong>{html.escape(division)}</strong>
                     </div>
                     <div class="focus-detail-item">
                         <span>ACTIONS</span>
@@ -551,7 +576,6 @@ def focus_project_details(imp):
     name=txt(x.get("Project_Name"),"Unnamed Project")
     status=txt(x.get("Status"),"Unknown")
     responsible=txt(x.get("Responsible",x.get("Employee")),"Not Assigned")
-    division=txt(x.get("DPG",x.get("Division")),"N/A")
     cost=num(x.get("Cost"))
     allocated=num(x.get("AllocatedHours"))
     used=num(x.get("UsedHours"))
@@ -576,7 +600,6 @@ def focus_project_details(imp):
     <div class="focus-name">{html.escape(name)}</div>
     <div class="focus-meta">
     <span>Responsible: {html.escape(responsible)}</span>
-    <span>Division: {html.escape(division)}</span>
     </div>
     <div class="focus-meta">
     <span>Allocated: {allocated:.1f} hrs</span>
@@ -605,7 +628,6 @@ def employee_focus_cards(imp,title,p):
         name=txt(x.get("Project_Name"),"Unnamed")
         status=txt(x.get("Status"),"Unknown")
         deadline=txt(x.get("DeadLine",x.get("Deadline")),"N/A")[:10]
-        division=txt(x.get("DPG",x.get("Division")),"N/A")
         actions=x.get("TotalActions",x.get("Total_Action",x.get("Actions",0)))
         cost=num(x.get("Cost"))
         members=x.get("AssignedMembers",x.get("Assigned_Members",x.get("Members",0)))
@@ -637,7 +659,6 @@ def employee_focus_cards(imp,title,p):
 </summary>
 <div class="focus-details">
 <div class="focus-detail-item"><span>RESPONSIBLE</span><strong>{html.escape(responsible)}</strong></div>
-<div class="focus-detail-item"><span>DIVISION</span><strong>{html.escape(division)}</strong></div>
 <div class="focus-detail-item"><span>ACTIONS</span><strong>{html.escape(txt(actions,"0"))}</strong></div>
 <div class="focus-detail-item"><span>ASSIGNED MEMBERS</span><strong>{html.escape(txt(members,"0"))}</strong></div>
 <div class="focus-detail-item"><span>COST</span><strong>{cost:,.0f}</strong></div>
@@ -995,7 +1016,14 @@ def chart_past_3_months_trend(trend):
 
 # Sidebar
 st.sidebar.markdown('**Performance Intelligence**\n\nProject & employee analytics')
-company=st.sidebar.selectbox('Company',['400','CRS','DRC',])
+company_codes = ['400', 'CRS', 'DRC']
+company_names = {code: company_display_name(code) for code in company_codes}
+company = st.sidebar.selectbox(
+    'Company',
+    options=company_codes,
+    format_func=lambda code: company_names.get(code, code),
+)
+company_name = company_names.get(company, company)
 mode=st.sidebar.radio('Dashboard',['Company','Employee','Project Performance'])
 today=date.today();fd=st.sidebar.date_input('From date',today.replace(month=1,day=1),max_value=today);td=st.sidebar.date_input('To date',today,min_value=fd,max_value=today)
 weekly_days=st.sidebar.slider('Weekly report window',7,90,7,7)
@@ -1037,7 +1065,7 @@ if mode=='Employee':
                     v["Responsible"] = emp_name
     # ==========================================
 
-    st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Employee Performance</div><div class="header-title">👤 {html.escape(txt(selected_employee.get("Employee"),"Employee"))}</div><div class="header-sub">Employee ID {html.escape(str(employee_id))} · Company {company} · Last {days} days</div></div><div class="live">.</div></div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Employee Performance</div><div class="header-title">👤 {html.escape(txt(selected_employee.get("Employee"),"Employee"))}</div><div class="header-sub">Employee ID {html.escape(str(employee_id))} · Company {html.escape(company_name)} · Last {days} days</div></div><div class="live">.</div></div>',unsafe_allow_html=True)
     a,b=st.columns([1.05,1.7],gap='large')
     with a:
         with st.container(border=True):st.markdown('<div class="panel-label">✦ Employee Overview</div><div class="ai-copy">This view combines assigned projects, actions and actual daily work logs. The analytics below are calculated from the existing Employee model data.</div>',unsafe_allow_html=True)
@@ -1154,9 +1182,9 @@ if mode=='Project Performance':
 # CALL YOUR NEW FUNCTION HERE:
     progress = calculate_real_progress(actions)
     
-    st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Project Intelligence</div><div class="header-title">⚙️ {html.escape(txt(x.get("Parent_Project_Name"),"Project"))}</div><div class="header-sub">Employee {html.escape(str(employee_id))} · Company {company}</div></div><div class="live"> DATA</div></div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Project Intelligence</div><div class="header-title">⚙️ {html.escape(txt(x.get("Parent_Project_Name"),"Project"))}</div><div class="header-sub">Employee {html.escape(str(employee_id))} · Company {html.escape(company_name)}</div></div><div class="live"> DATA</div></div>',unsafe_allow_html=True)
     
-    st.markdown(cards([('📁','Status',x.get('Status','N/A')),('👥','Active Team',len(members)),('⚡','Actions',len(logs)),('⏱','Allocated',f'{allocated:.1f} h'),('⚙️','Used',f'{used:.1f} h'),('📈','Usage',f'{usage:.1f}%')]),unsafe_allow_html=True)
+    st.markdown(cards([('📁','Status',x.get('Status','N/A')),('👥','Active Team',len(members)),('⚡','Actions',len(actions)),('⏱','Allocated',f'{allocated:.1f} h'),('⚙️','Used',f'{used:.1f} h'),('📈','Usage',f'{usage:.1f}%')]),unsafe_allow_html=True)
     
     # 2. Fixed spacing and alignment with bordered containers
     # 2. Fixed spacing and alignment with bordered containers
@@ -1206,7 +1234,7 @@ if mode=='Project Performance':
 
 # Company
 kpi=compute_kpis(df); es=employee_summary(df); impdf=clean_rows(load_important_project_data(company));imp=get_important_projects(impdf)
-st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Company Performance</div><div class="header-title">📊 Company {html.escape(company)}</div><div class="header-sub">{fd} → {td}</div></div><div class="live">● LIVE DATA</div></div>',unsafe_allow_html=True)
+st.markdown(f'<div class="dashboard-header"><div><div class="eyebrow">Company Performance</div><div class="header-title">📊 {html.escape(company_name)}</div><div class="header-sub">{fd} → {td}</div></div><div class="live">● LIVE DATA</div></div>',unsafe_allow_html=True)
 l,r=st.columns([1.05,1.7],gap='large')
 with l:
     with st.container(border=True):

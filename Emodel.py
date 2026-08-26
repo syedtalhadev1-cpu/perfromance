@@ -245,11 +245,61 @@ def clean_timeline_rows(rows):
         if col in df.columns:
             df[col] = df[col].fillna("")
 
+    def parse_hours(value):
+        try:
+            if pd.isna(value):
+                return 0.0
+            text = str(value).strip()
+            if ":" in text:
+                hours, minutes = text.split(":", 1)
+                return int(hours) + int(minutes) / 60
+            return float(text)
+        except (TypeError, ValueError):
+            return 0.0
+
+    if "TimelineDate" not in df.columns:
+        for alias in ("DailyWorkDate", "WorkDate"):
+            if alias in df.columns:
+                df["TimelineDate"] = df[alias]
+                break
+    if "DailyTimeSpent" not in df.columns and "TimeCount" in df.columns:
+        df["DailyTimeSpent"] = df["TimeCount"]
+
+    for col in ("AllocatedHours", "UsedHours"):
+        if col in df.columns:
+            df[col] = df[col].map(parse_hours)
+
     # Parse standard date columns
     date_cols = ["DailyWorkDate", "DeadLine", "CreatedOn", "Project_EndDate"]
     for col in date_cols:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
+
+    if {"Master_Code", "Project_Code", "TimelineDate", "DailyTimeSpent"}.issubset(df.columns):
+        def parse_hours(value):
+            try:
+                if pd.isna(value):
+                    return 0.0
+                text = str(value).strip()
+                if ":" in text:
+                    hours, minutes = text.split(":", 1)
+                    return int(hours) + int(minutes) / 60
+                return float(text)
+            except (TypeError, ValueError):
+                return 0.0
+
+        logged = df[df["TimelineDate"].notna()].copy()
+        logged["_LoggedHours"] = logged["DailyTimeSpent"].map(parse_hours)
+        logged_hours = logged.groupby("Master_Code")["_LoggedHours"].sum()
+        parent_mask = df["Master_Code"].isna() | df["Master_Code"].astype(str).str.strip().eq("")
+        if "UsedHours" not in df.columns:
+            df["UsedHours"] = 0.0
+        df["UsedHours"] = df["UsedHours"].map(parse_hours)
+        fallback = df.loc[parent_mask, "Project_Code"].map(logged_hours).fillna(0)
+        df.loc[parent_mask, "UsedHours"] = df.loc[parent_mask, "UsedHours"].where(
+            df.loc[parent_mask, "UsedHours"] > 0,
+            fallback,
+        )
 
     return df
 
@@ -284,9 +334,12 @@ def get_actions(df):
         (df["Master_Code"].astype(str).str.strip().ne(""))
     ].copy()
 
-    # The employee stored procedure can return a person's action/timeline row
-    # without also returning the parent-project row.  Do not discard that valid
-    # action merely because its Master_Code is absent from this result set.
+    project_codes = set(
+        get_projects(df)["Project_Code"].dropna().astype(str).str.strip()
+    )
+    actions = actions[
+        actions["Master_Code"].astype(str).str.strip().isin(project_codes)
+    ].copy()
 
     return actions
 
@@ -387,6 +440,9 @@ def get_important_projects(df):
         projects = projects[
             projects["ProjectType"].astype(str).str.strip().str.lower().eq("core tasks")
         ].copy()
+
+    action_counts = get_actions(df).groupby("Master_Code")["Project_Code"].nunique()
+    projects["TotalActions"] = projects["Project_Code"].map(action_counts).fillna(0).astype(int)
 
     # --- Case 1: Urgent ---
     urgent = projects[
@@ -536,33 +592,34 @@ def get_employee_project_details(df, project_code, employee_id):
     project_code = str(project_code).strip()
     employee_project_actions = df[
         (
-            df["Project_Code"].astype(str).str.strip().eq(project_code) |
             df["Master_Code"].astype(str).str.strip().eq(project_code)
         ) &
-        (df["DailyWorkDate"].notna())
+        (df["TaskType"].astype(str).str.strip().str.lower() == "action")
     ].copy()
 
-    total_actions = len(employee_project_actions)
+    total_actions = employee_project_actions["Project_Code"].nunique()
     completed_actions = 0
     
     if total_actions > 0 and "Status" in employee_project_actions.columns:
-        completed_actions = len(
-            employee_project_actions[
-                employee_project_actions["Status"].str.contains("Completed", case=False, na=False)
-            ]
-        )
+        completed_actions = employee_project_actions.loc[
+            employee_project_actions["Status"].str.contains("Completed", case=False, na=False),
+            "Project_Code",
+        ].nunique()
 
     actions_list = []
     if not employee_project_actions.empty:
-        employee_project_actions["DailyWorkDate"] = employee_project_actions["DailyWorkDate"].dt.strftime('%Y-%m-%d')
+        date_column = "DailyWorkDate" if "DailyWorkDate" in employee_project_actions else "TimelineDate"
+        employee_project_actions[date_column] = pd.to_datetime(
+            employee_project_actions[date_column], errors="coerce"
+        ).dt.strftime('%Y-%m-%d')
         actions_list = employee_project_actions[[
-            "DailyWorkDate",
+            date_column,
             "StartTime",
             "EndTime",
             "TimeCount",
             "WorkAchieved",
             "Status"
-        ]].to_dict(orient="records")
+        ]].rename(columns={date_column: "DailyWorkDate"}).to_dict(orient="records")
 
     return {
         "Project_Code": project_code,

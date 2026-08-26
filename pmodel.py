@@ -17,6 +17,15 @@ class ProjectDataProcessor:
         """Cleans and standardizes columns for safe pandas processing."""
         if self.df.empty:
             return
+
+        # Stored procedures use both names for the same timeline fields.
+        if "TimelineDate" not in self.df.columns:
+            for alias in ("DailyWorkDate", "WorkDate"):
+                if alias in self.df.columns:
+                    self.df["TimelineDate"] = self.df[alias]
+                    break
+        if "DailyTimeSpent" not in self.df.columns and "TimeCount" in self.df.columns:
+            self.df["DailyTimeSpent"] = self.df["TimeCount"]
             
         # Ensure codes are clean strings
         self.df["Master_Code"] = self.df["Master_Code"].fillna("").astype(str).str.strip()
@@ -24,7 +33,9 @@ class ProjectDataProcessor:
         
         # Ensure allocated hours are numeric
         if "AllocatedHours" in self.df.columns:
-            self.df["AllocatedHours"] = pd.to_numeric(self.df["AllocatedHours"], errors="coerce").fillna(0.0)
+            self.df["AllocatedHours"] = self.df["AllocatedHours"].map(self._parse_time_to_hours)
+        if "UsedHours" in self.df.columns:
+            self.df["UsedHours"] = self.df["UsedHours"].map(self._parse_time_to_hours)
             
         # Standardize date types
         for date_col in ["DeadLine", "CreatedDate", "TimelineDate"]:
@@ -78,7 +89,10 @@ class ProjectDataProcessor:
         total_allocated_hours = float(unique_projects["AllocatedHours"].sum())
 
         # 2. Identify Unique Action Logs (where WorkAchieved is present and TimelineDate is valid)
-        action_logs = self.df[self.df["TimelineDate"].notna() & (self.df["WorkAchieved"].str.strip() != "")].copy()
+        action_logs = self.df[
+            self.df["TimelineDate"].notna() &
+            self.df["DailyTimeSpent"].notna()
+        ].copy()
         total_actions_logged = len(action_logs)
 
         # 3. Calculate used hours from each individual daily log
@@ -184,7 +198,7 @@ class ProjectDataProcessor:
                 }
 
             # Map active work achievement logs
-            if pd.notna(row["TimelineDate"]) and str(row["WorkAchieved"]).strip() != "":
+            if pd.notna(row["TimelineDate"]) and pd.notna(row["DailyTimeSpent"]):
                 parsed_hours = self._parse_time_to_hours(row["DailyTimeSpent"])
                 
                 existing_logs = parent_node["Sub_Actions"][p_code]["Timeline_Logs"]

@@ -21,6 +21,19 @@ CONN_STR = (
 )
 
 
+def parse_hours(value):
+    try:
+        if pd.isna(value):
+            return 0.0
+        text = str(value).strip()
+        if ":" in text:
+            hours, minutes = text.split(":", 1)
+            return int(hours) + int(minutes) / 60
+        return float(text)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 # =====================================================
 # 1. LOAD DATA FROM STORED PROCEDURE
 # =====================================================
@@ -121,12 +134,26 @@ def clean_rows(rows):
 
         if col in df.columns:
 
-            df[col] = (
-                pd.to_numeric(
-                    df[col],
-                    errors="coerce"
-                )
-                .fillna(0)
+            df[col] = df[col].map(parse_hours)
+
+    if "UsedHours" in df.columns and {"Master_Code", "Project_Code"}.issubset(df.columns):
+        time_col = next(
+            (col for col in ("DailyTimeSpent", "TimeCount") if col in df.columns),
+            None,
+        )
+        date_col = next(
+            (col for col in ("TimelineDate", "DailyWorkDate", "WorkDate") if col in df.columns),
+            None,
+        )
+        if time_col and date_col:
+            logged = df[df[date_col].notna()].copy()
+            logged["_LoggedHours"] = logged[time_col].map(parse_hours)
+            logged_hours = logged.groupby("Master_Code")["_LoggedHours"].sum()
+            parent_mask = df["Master_Code"].isna() | df["Master_Code"].astype(str).str.strip().eq("")
+            fallback = df.loc[parent_mask, "Project_Code"].map(logged_hours).fillna(0)
+            df.loc[parent_mask, "UsedHours"] = df.loc[parent_mask, "UsedHours"].where(
+                df.loc[parent_mask, "UsedHours"] > 0,
+                fallback,
             )
 
     return df
@@ -183,7 +210,7 @@ def compute_kpis(df):
 
     total_projects = projects["Project_Code"].nunique()
 
-    total_actions = len(actions)
+    total_actions = actions["Project_Code"].nunique()
 
     total_employees = df["EmployeeId"].nunique()
 
@@ -246,6 +273,9 @@ def get_important_projects(df):
         projects = projects[
             projects["ProjectType"].astype(str).str.strip().str.lower().eq("core tasks")
         ].copy()
+
+    action_counts = get_actions(df).groupby("Master_Code")["Project_Code"].nunique()
+    projects["TotalActions"] = projects["Project_Code"].map(action_counts).fillna(0).astype(int)
 
     # --------------------------------
     # CASE 1
@@ -385,14 +415,12 @@ def project_summary(df):
             actions["Master_Code"] == project_code
         ]
 
-        total_actions = len(project_actions)
+        total_actions = project_actions["Project_Code"].nunique()
 
-        completed_actions = len(
-            project_actions[
-                project_actions["Status"]
-                .str.contains("Completed", case=False, na=False)
-            ]
-        )
+        completed_actions = project_actions.loc[
+            project_actions["Status"].str.contains("Completed", case=False, na=False),
+            "Project_Code",
+        ].nunique()
 
         pending_actions = total_actions - completed_actions
 
@@ -503,7 +531,7 @@ def project_details(df, project_code):
 
         "UsedHours": project["UsedHours"],
 
-        "TotalActions": len(project_actions),
+        "TotalActions": project_actions["Project_Code"].nunique(),
 
         "CompletedActions": completed,
 
