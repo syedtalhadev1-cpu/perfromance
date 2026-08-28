@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from dashboard_model import (
     clean_rows, compute_kpis, employee_summary,
     get_important_projects, load_company_data,
-    load_important_project_data, project_details,
+    load_company_master, load_important_project_data, project_details,
 )
 from Emodel import (
     clean_timeline_rows,
@@ -134,6 +134,29 @@ def company_display_name(company_code):
     except Exception:
         pass
     return company_code
+
+@st.cache_data(ttl=3600)
+def load_company_options():
+    """Load the company selector options from the database."""
+    rows = load_company_master()
+
+    options = {}
+    for row in rows:
+        code = row.get("CompanyCode", row.get("Company_Code"))
+        if code is None or pd.isna(code):
+            continue
+
+        code = str(code).strip()
+        if code.endswith(".0"):
+            code = code[:-2]
+        if not code:
+            continue
+
+        name = row.get("CompanyName", row.get("Company_Name"))
+        name = code if name is None or pd.isna(name) else str(name).strip()
+        options[code] = name or code
+
+    return dict(sorted(options.items(), key=lambda item: item[1].lower()))
 
 def cards(items):
     return '<div class="panel"><div class="panel-label">Key Metrics</div><div class="kpi-grid">'+''.join(f'<div class="kpi-card"><div class="kpi-icon">{i}</div><div class="kpi-value">{html.escape(str(v))}</div><div class="kpi-label">{html.escape(str(l))}</div></div>' for i,l,v in items)+'</div></div>'
@@ -1016,8 +1039,11 @@ def chart_past_3_months_trend(trend):
 
 # Sidebar
 st.sidebar.markdown('**Performance Intelligence**\n\nProject & employee analytics')
-company_codes = ['400', 'CRS', 'DRC']
-company_names = {code: company_display_name(code) for code in company_codes}
+company_names = load_company_options()
+company_codes = list(company_names)
+if not company_codes:
+    st.sidebar.error('No companies found in the database.')
+    st.stop()
 company = st.sidebar.selectbox(
     'Company',
     options=company_codes,

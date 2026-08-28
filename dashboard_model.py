@@ -82,6 +82,28 @@ def load_company_data(
         conn.close()
 
 
+def load_company_master():
+    """Load company codes and names from the company master table."""
+    conn = pyodbc.connect(CONN_STR)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT Com_No AS CompanyCode,
+                   Com_Name AS CompanyName
+            FROM Company_Master
+            WHERE Com_No IS NOT NULL
+            ORDER BY Com_Name, Com_No
+            """
+        )
+        columns = [column[0] for column in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def load_important_project_data(company_code="400"):
     """Load data for Important Projects independently of dashboard filters."""
     today = datetime.today().date()
